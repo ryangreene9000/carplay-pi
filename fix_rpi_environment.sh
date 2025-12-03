@@ -82,9 +82,7 @@ sudo apt-get install -y \
     python3-venv \
     python3-pip \
     build-essential \
-    curl \
-    libffi-dev \
-    libssl-dev
+    curl
 
 # Optional: bluez-tools (not available on all versions)
 echo ""
