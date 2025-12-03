@@ -80,8 +80,8 @@ async function togglePlayback() {
             // Refresh status to get accurate state
             await fetchMediaStatus();
         } else {
-            console.warn('Toggle playback:', data.output);
-            showNotification(data.output || 'No media player available', 'warning');
+            console.warn('Toggle playback:', data.message || data.output);
+            showNotification(data.message || data.output || 'No media player available', 'warning');
         }
     } catch (error) {
         console.error('Error toggling playback:', error);
@@ -104,7 +104,7 @@ async function previousTrack() {
             // Refresh status after a short delay
             setTimeout(fetchMediaStatus, 500);
         } else {
-            showNotification(data.output || 'Cannot go to previous track', 'warning');
+            showNotification(data.message || data.output || 'Cannot go to previous track', 'warning');
         }
     } catch (error) {
         console.error('Error going to previous track:', error);
@@ -124,7 +124,7 @@ async function nextTrack() {
             // Refresh status after a short delay
             setTimeout(fetchMediaStatus, 500);
         } else {
-            showNotification(data.output || 'Cannot skip track', 'warning');
+            showNotification(data.message || data.output || 'Cannot skip track', 'warning');
         }
     } catch (error) {
         console.error('Error going to next track:', error);

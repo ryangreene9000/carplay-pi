@@ -141,79 +141,146 @@ def bluetooth_status():
 
 # =============================================================================
 # Media Control Endpoints (using playerctl on Raspberry Pi)
+# Targets the active AVRCP/BlueZ media player for Bluetooth audio control
 # =============================================================================
 
-def run_playerctl(*args):
+import logging
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+
+def get_active_player():
     """
-    Run a playerctl command and return (success, output).
-    playerctl controls media players via D-Bus (works with Bluetooth A2DP).
+    Get the first active media player (usually the BlueZ AVRCP player).
+    Returns the player name or None if no players are available.
     """
-    # Check if we're on Linux (playerctl only works on Linux)
+    # Check if we're on Linux
     if platform.system().lower() != 'linux':
-        return False, "playerctl only available on Linux/Raspberry Pi"
+        return None
     
-    cmd = ["playerctl"] + list(args)
     try:
-        out = subprocess.check_output(cmd, stderr=subprocess.STDOUT, text=True, timeout=5)
-        return True, out.strip()
+        out = subprocess.check_output(
+            ["playerctl", "-l"], 
+            stderr=subprocess.STDOUT, 
+            text=True, 
+            timeout=5
+        ).strip()
+        players = [p for p in out.splitlines() if p]
+        if players:
+            # Prefer bluez/bluetooth players
+            for player in players:
+                if 'bluez' in player.lower() or 'bluetooth' in player.lower():
+                    logging.debug(f"Active player (Bluetooth): {player}")
+                    return player
+            # Fall back to first available player
+            logging.debug(f"Active player: {players[0]}")
+            return players[0]
+        logging.debug("No active players found")
+        return None
     except subprocess.CalledProcessError as e:
-        print(f"playerctl error: {e.output}")
-        return False, e.output.strip() if e.output else "Command failed"
+        logging.debug(f"playerctl -l error: {e.output if e.output else 'No output'}")
+        return None
     except FileNotFoundError:
-        return False, "playerctl not installed. Run: sudo apt-get install playerctl"
+        logging.debug("playerctl not installed")
+        return None
+    except Exception as e:
+        logging.debug(f"Error getting active player: {e}")
+        return None
+
+def run_playerctl_command(command):
+    """
+    Run a playerctl command targeting the active player.
+    Returns (success, message).
+    """
+    # Check if we're on Linux
+    if platform.system().lower() != 'linux':
+        return False, "Media controls only available on Raspberry Pi"
+    
+    player = get_active_player()
+    if not player:
+        return False, "No active media player found (is your phone connected and playing?)"
+    
+    try:
+        cmd = ["playerctl", "-p", player, command]
+        logging.debug(f"Running: {' '.join(cmd)}")
+        out = subprocess.check_output(cmd, stderr=subprocess.STDOUT, text=True, timeout=5)
+        return True, out.strip() if out.strip() else "OK"
+    except subprocess.CalledProcessError as e:
+        error_msg = e.output.strip() if e.output else "Command failed"
+        logging.debug(f"playerctl error: {error_msg}")
+        return False, error_msg
+    except FileNotFoundError:
+        return False, "playerctl not installed"
     except subprocess.TimeoutExpired:
-        return False, "playerctl command timed out"
+        return False, "Command timed out"
     except Exception as e:
         return False, str(e)
 
 @app.route('/api/media/play', methods=['POST'])
 def api_media_play():
     """Send play command to connected media player"""
-    ok, out = run_playerctl("play")
-    return jsonify({"ok": ok, "output": out}), (200 if ok else 500)
+    ok, msg = run_playerctl_command("play")
+    return jsonify({"ok": ok, "message": msg}), (200 if ok else 500)
 
 @app.route('/api/media/pause', methods=['POST'])
 def api_media_pause():
     """Send pause command to connected media player"""
-    ok, out = run_playerctl("pause")
-    return jsonify({"ok": ok, "output": out}), (200 if ok else 500)
+    ok, msg = run_playerctl_command("pause")
+    return jsonify({"ok": ok, "message": msg}), (200 if ok else 500)
 
 @app.route('/api/media/toggle', methods=['POST'])
 def api_media_toggle():
     """Toggle play/pause on connected media player"""
-    ok, out = run_playerctl("play-pause")
-    return jsonify({"ok": ok, "output": out}), (200 if ok else 500)
+    ok, msg = run_playerctl_command("play-pause")
+    return jsonify({"ok": ok, "message": msg}), (200 if ok else 500)
 
 @app.route('/api/media/next', methods=['POST'])
 def api_media_next():
     """Skip to next track on connected media player"""
-    ok, out = run_playerctl("next")
-    return jsonify({"ok": ok, "output": out}), (200 if ok else 500)
+    ok, msg = run_playerctl_command("next")
+    return jsonify({"ok": ok, "message": msg}), (200 if ok else 500)
 
 @app.route('/api/media/previous', methods=['POST'])
 def api_media_previous():
     """Go to previous track on connected media player"""
-    ok, out = run_playerctl("previous")
-    return jsonify({"ok": ok, "output": out}), (200 if ok else 500)
+    ok, msg = run_playerctl_command("previous")
+    return jsonify({"ok": ok, "message": msg}), (200 if ok else 500)
 
 @app.route('/api/media/status')
 def api_media_status():
     """Get current playback status from connected media player"""
-    ok_status, status = run_playerctl("status")
-    ok_artist, artist = run_playerctl("metadata", "artist")
-    ok_title, title = run_playerctl("metadata", "title")
-    ok_album, album = run_playerctl("metadata", "album")
+    player = get_active_player()
     
-    # Determine if we have a valid player
-    has_player = ok_status and status.lower() not in ['no players found', 'no player could handle this command']
+    if not player:
+        return jsonify({
+            "ok": False,
+            "status": "no-player",
+            "message": "No media player connected",
+            "artist": "",
+            "title": "",
+            "album": "",
+            "is_playing": False
+        })
+    
+    def pc(*args):
+        """Helper to run playerctl with the active player."""
+        try:
+            cmd = ["playerctl", "-p", player] + list(args)
+            return subprocess.check_output(cmd, stderr=subprocess.STDOUT, text=True, timeout=5).strip()
+        except:
+            return ""
+    
+    status = pc("status")
+    artist = pc("metadata", "artist")
+    title = pc("metadata", "title")
+    album = pc("metadata", "album")
     
     return jsonify({
-        "ok": has_player,
-        "status": status if ok_status else "No player",
-        "artist": artist if ok_artist else "",
-        "title": title if ok_title else "",
-        "album": album if ok_album else "",
-        "is_playing": status.lower() == "playing" if ok_status else False
+        "ok": True,
+        "status": status or "Unknown",
+        "artist": artist,
+        "title": title,
+        "album": album,
+        "is_playing": status.lower() == "playing" if status else False,
+        "player": player
     })
 
 @app.route('/api/map/route', methods=['POST'])
