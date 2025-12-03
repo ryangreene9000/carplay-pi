@@ -92,9 +92,76 @@ sudo apt-get install -y bluez-tools 2>/dev/null || print_warning "bluez-tools no
 print_success "System dependencies installed"
 
 # =============================================================================
+# Step 2b: Install playerctl from source (not in apt on Bookworm)
+# =============================================================================
+print_header "Step 1b/8: Installing playerctl from source"
+
+echo "playerctl is not available in Raspberry Pi OS apt repositories."
+echo "Building from source..."
+
+# Check if playerctl is already installed
+if command -v playerctl &> /dev/null; then
+    EXISTING_VERSION=$(playerctl --version 2>/dev/null || echo "unknown")
+    print_success "playerctl already installed (version: $EXISTING_VERSION)"
+else
+    echo ""
+    echo "Installing build dependencies for playerctl..."
+    sudo apt-get install -y \
+        meson \
+        ninja-build \
+        libglib2.0-dev \
+        libgirepository1.0-dev \
+        gobject-introspection \
+        wget \
+        unzip
+
+    # Fetch and build playerctl
+    cd /tmp
+    PLAYERCTL_VERSION="2.4.1"
+    
+    echo ""
+    echo "Downloading playerctl v${PLAYERCTL_VERSION}..."
+    rm -rf playerctl.zip playerctl-${PLAYERCTL_VERSION} 2>/dev/null || true
+    wget -q https://github.com/altdesktop/playerctl/archive/refs/tags/v${PLAYERCTL_VERSION}.zip -O playerctl.zip
+    
+    if [[ ! -f playerctl.zip ]]; then
+        print_error "Failed to download playerctl"
+    else
+        echo "Extracting..."
+        unzip -q playerctl.zip
+        cd playerctl-${PLAYERCTL_VERSION}
+        
+        echo "Building with Meson/Ninja..."
+        meson setup build --prefix=/usr
+        ninja -C build
+        
+        echo "Installing..."
+        sudo ninja -C build install
+        
+        # Update library cache
+        sudo ldconfig
+        
+        cd /tmp
+        rm -rf playerctl.zip playerctl-${PLAYERCTL_VERSION}
+    fi
+    
+    # Return to script directory
+    cd "$SCRIPT_DIR"
+    
+    # Verify installation
+    if command -v playerctl &> /dev/null; then
+        INSTALLED_VERSION=$(playerctl --version 2>/dev/null || echo "unknown")
+        print_success "playerctl installed successfully (version: $INSTALLED_VERSION)"
+    else
+        print_error "playerctl installation failed!"
+        echo "  Media controls may not work. Try installing manually."
+    fi
+fi
+
+# =============================================================================
 # Step 3: Enable Bluetooth Service
 # =============================================================================
-print_header "Step 2/7: Enabling Bluetooth Service"
+print_header "Step 2/8: Enabling Bluetooth Service"
 
 sudo systemctl enable bluetooth
 sudo systemctl start bluetooth
@@ -113,7 +180,7 @@ fi
 # =============================================================================
 # Step 4: Create/Update Python Virtual Environment
 # =============================================================================
-print_header "Step 3/7: Setting Up Python Virtual Environment"
+print_header "Step 3/8: Setting Up Python Virtual Environment"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
@@ -142,7 +209,7 @@ print_success "Virtual environment ready"
 # =============================================================================
 # Step 5: Install Python Dependencies
 # =============================================================================
-print_header "Step 4/7: Installing Python Dependencies"
+print_header "Step 4/8: Installing Python Dependencies"
 
 # Install from requirements.txt first
 if [[ -f "requirements.txt" ]]; then
@@ -178,7 +245,7 @@ print_success "Python dependencies installed"
 # =============================================================================
 # Step 6: Fix Bluetooth Permissions
 # =============================================================================
-print_header "Step 5/7: Fixing Bluetooth Permissions"
+print_header "Step 5/8: Fixing Bluetooth Permissions"
 
 PYTHON_PATH=$(readlink -f "$(which python3)")
 echo "Python path: $PYTHON_PATH"
@@ -205,7 +272,7 @@ fi
 # =============================================================================
 # Step 7: Verify Module Imports
 # =============================================================================
-print_header "Step 6/7: Verifying Python Modules"
+print_header "Step 6/8: Verifying Python Modules"
 
 echo "Testing module imports..."
 IMPORT_ERRORS=0
@@ -256,7 +323,7 @@ fi
 # =============================================================================
 # Step 8: Ensure Scripts Exist
 # =============================================================================
-print_header "Step 7/7: Checking Project Scripts"
+print_header "Step 7/8: Checking Project Scripts"
 
 # Check/create build_carplay.sh
 if [[ ! -f "build_carplay.sh" ]]; then
@@ -301,6 +368,21 @@ else
 fi
 
 # =============================================================================
+# Step 9: Verify playerctl for media controls
+# =============================================================================
+print_header "Step 8/8: Verifying Media Control Tools"
+
+echo "Checking playerctl..."
+if command -v playerctl &> /dev/null; then
+    PLAYERCTL_VER=$(playerctl --version 2>/dev/null || echo "installed")
+    print_success "playerctl is available (${PLAYERCTL_VER})"
+    echo "  Media controls (play/pause/next/prev) will work with Bluetooth audio"
+else
+    print_warning "playerctl not found"
+    echo "  Media controls will not work until playerctl is installed"
+fi
+
+# =============================================================================
 # Final Summary
 # =============================================================================
 print_header "Environment Fix Complete!"
@@ -309,6 +391,7 @@ echo -e "${GREEN}All fixes applied successfully!${NC}"
 echo ""
 echo "Summary:"
 echo "  ✓ System dependencies installed"
+echo "  ✓ playerctl built from source (for media controls)"
 echo "  ✓ Bluetooth service enabled"
 echo "  ✓ Python virtual environment ready"
 echo "  ✓ Python packages installed"
