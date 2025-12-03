@@ -106,14 +106,20 @@ if command -v playerctl &> /dev/null; then
 else
     echo ""
     echo "Installing build dependencies for playerctl..."
+    # Package names differ between Debian versions
+    # Try Bookworm names first, fall back to older names
     sudo apt-get install -y \
         meson \
         ninja-build \
         libglib2.0-dev \
-        libgirepository1.0-dev \
-        gobject-introspection \
         wget \
-        unzip
+        unzip || true
+    
+    # GObject introspection - try different package names
+    sudo apt-get install -y libgirepository-1.0-dev 2>/dev/null || \
+    sudo apt-get install -y libgirepository1.0-dev 2>/dev/null || \
+    sudo apt-get install -y gir1.2-glib-2.0 2>/dev/null || \
+    print_warning "GObject introspection packages not found - playerctl may build without introspection"
 
     # Fetch and build playerctl
     cd /tmp
