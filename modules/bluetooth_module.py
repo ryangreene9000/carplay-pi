@@ -62,24 +62,82 @@ class BluetoothManager:
             return []
     
     async def _async_scan(self, timeout):
-        """Async method to perform BLE scan."""
-        devices = []
+        """Async method to perform BLE scan with improved name detection."""
+        results = []
+        seen_addresses = set()
+        
         try:
             print(f"Starting Bluetooth LE scan (timeout: {timeout}s)...")
-            discovered = await BleakScanner.discover(timeout=timeout)
             
-            for device in discovered:
-                devices.append({
-                    'name': device.name or 'Unknown Device',
-                    'address': device.address,
-                    'rssi': getattr(device, 'rssi', None)  # Signal strength if available
+            # Use return_adv=True to get advertisement data with more device info
+            discovered = await BleakScanner.discover(timeout=timeout, return_adv=True)
+            
+            for address, (device, adv_data) in discovered.items():
+                # Try multiple sources for a readable name
+                display_name = None
+                
+                # 1. Try the device name directly
+                if device.name and device.name.strip():
+                    display_name = device.name.strip()
+                
+                # 2. Try local_name from advertisement data
+                if not display_name and adv_data:
+                    local_name = getattr(adv_data, 'local_name', None)
+                    if local_name and local_name.strip():
+                        display_name = local_name.strip()
+                
+                # 3. Try manufacturer data to identify common devices
+                if not display_name and adv_data:
+                    mfr_data = getattr(adv_data, 'manufacturer_data', {})
+                    if mfr_data:
+                        # Apple devices (company ID 76 = 0x004C)
+                        if 76 in mfr_data:
+                            display_name = "Apple Device"
+                        # Samsung (company ID 117)
+                        elif 117 in mfr_data:
+                            display_name = "Samsung Device"
+                        # Microsoft (company ID 6)
+                        elif 6 in mfr_data:
+                            display_name = "Microsoft Device"
+                        # Google (company ID 224)
+                        elif 224 in mfr_data:
+                            display_name = "Google Device"
+                
+                # 4. Fall back to Unknown Device
+                if not display_name:
+                    display_name = "Unknown Device"
+                
+                # Get address (avoid duplicates)
+                device_address = getattr(device, 'address', None) or address or "unknown"
+                
+                if device_address in seen_addresses:
+                    continue
+                seen_addresses.add(device_address)
+                
+                # Get RSSI (signal strength)
+                rssi = None
+                if adv_data:
+                    rssi = getattr(adv_data, 'rssi', None)
+                if rssi is None:
+                    rssi = getattr(device, 'rssi', None)
+                
+                results.append({
+                    'name': display_name,
+                    'address': device_address,
+                    'rssi': rssi
                 })
             
-            # Sort by signal strength (strongest first) if available
-            devices.sort(key=lambda d: d.get('rssi') or -999, reverse=True)
+            # Sort: named devices first, then by signal strength
+            results.sort(key=lambda d: (
+                d['name'] == 'Unknown Device',  # Named devices first
+                -(d.get('rssi') or -999)  # Then by signal strength
+            ))
             
-            print(f"Found {len(devices)} Bluetooth devices")
-            return devices
+            # Count named vs unknown
+            named_count = sum(1 for d in results if d['name'] != 'Unknown Device')
+            print(f"Found {len(results)} Bluetooth devices ({named_count} with names)")
+            
+            return results
             
         except Exception as e:
             print(f"Async Bluetooth scan error: {e}")
