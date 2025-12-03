@@ -8,6 +8,8 @@ from flask import Flask, render_template, jsonify, request
 import threading
 import time
 import os
+import subprocess
+import platform
 from modules.sense_hat_module import SenseHATManager
 from modules.bluetooth_module import BluetoothManager
 from modules.music_module import MusicManager
@@ -126,9 +128,93 @@ def connect_bluetooth():
 @app.route('/api/bluetooth/disconnect', methods=['POST'])
 def disconnect_bluetooth():
     """Disconnect Bluetooth"""
-    result = bluetooth.disconnect()
+    data = request.json or {}
+    device_address = data.get('address')
+    result = bluetooth.disconnect(device_address)
     system_state['bluetooth_connected'] = False
     return jsonify(result)
+
+@app.route('/api/bluetooth/status')
+def bluetooth_status():
+    """Get current Bluetooth connection status"""
+    return jsonify(bluetooth.get_status())
+
+# =============================================================================
+# Media Control Endpoints (using playerctl on Raspberry Pi)
+# =============================================================================
+
+def run_playerctl(*args):
+    """
+    Run a playerctl command and return (success, output).
+    playerctl controls media players via D-Bus (works with Bluetooth A2DP).
+    """
+    # Check if we're on Linux (playerctl only works on Linux)
+    if platform.system().lower() != 'linux':
+        return False, "playerctl only available on Linux/Raspberry Pi"
+    
+    cmd = ["playerctl"] + list(args)
+    try:
+        out = subprocess.check_output(cmd, stderr=subprocess.STDOUT, text=True, timeout=5)
+        return True, out.strip()
+    except subprocess.CalledProcessError as e:
+        print(f"playerctl error: {e.output}")
+        return False, e.output.strip() if e.output else "Command failed"
+    except FileNotFoundError:
+        return False, "playerctl not installed. Run: sudo apt-get install playerctl"
+    except subprocess.TimeoutExpired:
+        return False, "playerctl command timed out"
+    except Exception as e:
+        return False, str(e)
+
+@app.route('/api/media/play', methods=['POST'])
+def api_media_play():
+    """Send play command to connected media player"""
+    ok, out = run_playerctl("play")
+    return jsonify({"ok": ok, "output": out}), (200 if ok else 500)
+
+@app.route('/api/media/pause', methods=['POST'])
+def api_media_pause():
+    """Send pause command to connected media player"""
+    ok, out = run_playerctl("pause")
+    return jsonify({"ok": ok, "output": out}), (200 if ok else 500)
+
+@app.route('/api/media/toggle', methods=['POST'])
+def api_media_toggle():
+    """Toggle play/pause on connected media player"""
+    ok, out = run_playerctl("play-pause")
+    return jsonify({"ok": ok, "output": out}), (200 if ok else 500)
+
+@app.route('/api/media/next', methods=['POST'])
+def api_media_next():
+    """Skip to next track on connected media player"""
+    ok, out = run_playerctl("next")
+    return jsonify({"ok": ok, "output": out}), (200 if ok else 500)
+
+@app.route('/api/media/previous', methods=['POST'])
+def api_media_previous():
+    """Go to previous track on connected media player"""
+    ok, out = run_playerctl("previous")
+    return jsonify({"ok": ok, "output": out}), (200 if ok else 500)
+
+@app.route('/api/media/status')
+def api_media_status():
+    """Get current playback status from connected media player"""
+    ok_status, status = run_playerctl("status")
+    ok_artist, artist = run_playerctl("metadata", "artist")
+    ok_title, title = run_playerctl("metadata", "title")
+    ok_album, album = run_playerctl("metadata", "album")
+    
+    # Determine if we have a valid player
+    has_player = ok_status and status.lower() not in ['no players found', 'no player could handle this command']
+    
+    return jsonify({
+        "ok": has_player,
+        "status": status if ok_status else "No player",
+        "artist": artist if ok_artist else "",
+        "title": title if ok_title else "",
+        "album": album if ok_album else "",
+        "is_playing": status.lower() == "playing" if ok_status else False
+    })
 
 @app.route('/api/map/route', methods=['POST'])
 def get_route():

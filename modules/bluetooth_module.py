@@ -6,11 +6,13 @@ Cross-platform support for macOS, Linux (Raspberry Pi), and Windows
 Platform Notes:
 - macOS: Uses CoreBluetooth via bleak (no extra setup needed)
 - Linux/Raspberry Pi: Uses BlueZ via bleak (requires bluez package)
+  - For A2DP audio: Uses bluetoothctl for pairing/connecting
 - Windows: Uses WinRT via bleak (usually works out of the box)
 """
 
 import asyncio
 import platform
+import subprocess
 import sys
 
 # Detect the operating system
@@ -170,15 +172,52 @@ class BluetoothManager:
             {'name': 'Mock Phone', 'address': 'AA:BB:CC:DD:EE:FF', 'rssi': -65}
         ]
     
+    def _run_bluetoothctl(self, *commands):
+        """
+        Run a series of bluetoothctl commands non-interactively.
+        
+        Args:
+            *commands: Commands to send to bluetoothctl
+            
+        Returns:
+            Tuple of (return_code, stdout, stderr)
+        """
+        try:
+            proc = subprocess.Popen(
+                ["bluetoothctl"],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            
+            # Send each command followed by newline; end with 'quit'
+            for cmd in commands:
+                proc.stdin.write(cmd + "\n")
+            proc.stdin.write("quit\n")
+            proc.stdin.flush()
+            
+            out, err = proc.communicate(timeout=30)
+            return proc.returncode, out, err
+            
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            return -1, "", "Timeout waiting for bluetoothctl"
+        except FileNotFoundError:
+            return -1, "", "bluetoothctl not found - install bluez package"
+        except Exception as e:
+            return -1, "", str(e)
+    
     def connect(self, device_address):
         """
         Connect to a Bluetooth device.
+        On Linux/Raspberry Pi, uses bluetoothctl for A2DP pairing.
         
         Args:
             device_address: MAC address of the device to connect
             
         Returns:
-            Dictionary with 'success' and 'message' keys
+            Dictionary with 'success', 'message', and connection details
         """
         if not device_address:
             return {'success': False, 'message': 'No device address provided'}
@@ -186,19 +225,57 @@ class BluetoothManager:
         try:
             print(f"Attempting to connect to Bluetooth device: {device_address}")
             
-            # For BLE devices, we would use BleakClient
-            # For now, we'll simulate the connection since actual BLE connection
-            # requires knowing the device's services and characteristics
+            # On Linux, use bluetoothctl for real pairing/connecting
+            if IS_LINUX:
+                print("Using bluetoothctl for connection...")
+                
+                # Try pair + trust + connect
+                rc, out, err = self._run_bluetoothctl(
+                    f"pair {device_address}",
+                    f"trust {device_address}",
+                    f"connect {device_address}"
+                )
+                
+                print(f"bluetoothctl output: {out}")
+                if rc != 0:
+                    print(f"bluetoothctl error: {err}")
+                
+                # Check if device is now connected
+                connected = (
+                    "Connected: yes" in out or 
+                    "Connection successful" in out or
+                    "already connected" in out.lower()
+                )
+                
+                if connected:
+                    self.connected_device = device_address
+                    self.is_connected_flag = True
+                    return {
+                        'success': True,
+                        'message': f'Connected to {device_address}',
+                        'address': device_address,
+                        'raw_output': out
+                    }
+                else:
+                    # Check for specific errors
+                    if "Failed to pair" in out:
+                        return {'success': False, 'message': 'Pairing failed - check phone for pairing request', 'raw_output': out}
+                    elif "not available" in out.lower():
+                        return {'success': False, 'message': 'Device not available - make sure it is nearby and discoverable', 'raw_output': out}
+                    else:
+                        return {'success': False, 'message': 'Connection failed', 'raw_output': out}
             
-            # Store the connection info
-            self.connected_device = device_address
-            self.is_connected_flag = True
-            
-            return {
-                'success': True, 
-                'message': f'Connected to {device_address}',
-                'address': device_address
-            }
+            else:
+                # On macOS/Windows, use simulated connection for now
+                # (BLE connection would require knowing device services)
+                self.connected_device = device_address
+                self.is_connected_flag = True
+                
+                return {
+                    'success': True, 
+                    'message': f'Connected to {device_address} (simulated on {SYSTEM_NAME})',
+                    'address': device_address
+                }
             
         except Exception as e:
             print(f"Bluetooth connect error: {e}")
@@ -212,23 +289,40 @@ class BluetoothManager:
             
             if client.is_connected:
                 self.connected_client = client
-                self.connected_device = device_address
-                self.is_connected_flag = True
+            self.connected_device = device_address
+            self.is_connected_flag = True
                 return True
             return False
         except Exception as e:
             print(f"Async connect error: {e}")
             raise
     
-    def disconnect(self):
+    def disconnect(self, device_address=None):
         """
-        Disconnect from the current Bluetooth device.
+        Disconnect from a Bluetooth device.
+        On Linux/Raspberry Pi, uses bluetoothctl.
         
+        Args:
+            device_address: Optional address to disconnect. Uses connected device if not specified.
+            
         Returns:
             Dictionary with 'success' and 'message' keys
         """
         try:
-            if self.connected_client:
+            address = device_address or self.connected_device
+            
+            if IS_LINUX and address:
+                print(f"Disconnecting from {address} using bluetoothctl...")
+                rc, out, err = self._run_bluetoothctl(f"disconnect {address}")
+                print(f"bluetoothctl disconnect: {out}")
+                
+                disconnected = (
+                    "Successful disconnected" in out or
+                    "Successfully disconnected" in out or
+                    "not connected" in out.lower()
+                )
+            
+            elif self.connected_client:
                 # Disconnect the BLE client
                 asyncio.run(self._async_disconnect())
             
@@ -239,7 +333,8 @@ class BluetoothManager:
             
             return {
                 'success': True, 
-                'message': f'Disconnected from {previous_device}' if previous_device else 'Disconnected'
+                'message': f'Disconnected from {previous_device}' if previous_device else 'Disconnected',
+                'address': address
             }
             
         except Exception as e:
@@ -261,7 +356,7 @@ class BluetoothManager:
     def is_connected(self):
         """Check if a device is currently connected."""
         return self.is_connected_flag
-    
+
     def get_connected_device(self):
         """Get the address of the currently connected device."""
         return self.connected_device

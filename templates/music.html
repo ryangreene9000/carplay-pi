@@ -14,9 +14,14 @@
         </header>
         
         <main class="music-player">
+            <div class="connection-status" id="connection-status" style="text-align: center; margin-bottom: 15px;">
+                <span id="status-indicator" style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #888; margin-right: 8px;"></span>
+                <span id="status-text" style="color: #888;">Not connected</span>
+            </div>
+            
             <div class="now-playing">
                 <div class="album-art">
-                    <div class="placeholder-art">🎵</div>
+                    <div class="placeholder-art" id="album-art">🎵</div>
                 </div>
                 <div class="track-info">
                     <h2 id="track-title">No track playing</h2>

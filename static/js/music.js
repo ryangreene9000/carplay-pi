@@ -1,32 +1,38 @@
 // Music player JavaScript
+// Handles Bluetooth connection, media controls, and status updates
 
 let isPlaying = false;
 let currentVolume = 50;
+let connectedDeviceAddress = null;
+let connectedDeviceName = null;
+let statusPollInterval = null;
 
-// Play/Pause button
+// =============================================================================
+// Media Control Buttons
+// =============================================================================
+
+// Play/Pause button - uses playerctl toggle
 const playPauseBtn = document.getElementById('play-pause-btn');
 if (playPauseBtn) {
     playPauseBtn.addEventListener('click', async () => {
-        if (isPlaying) {
-            await pauseMusic();
-        } else {
-            await playMusic();
-        }
+        await togglePlayback();
     });
 }
 
-// Previous/Next buttons
-document.getElementById('prev-btn')?.addEventListener('click', () => {
-    // Previous track functionality
-    console.log('Previous track');
+// Previous button
+document.getElementById('prev-btn')?.addEventListener('click', async () => {
+    await previousTrack();
 });
 
-document.getElementById('next-btn')?.addEventListener('click', () => {
-    // Next track functionality
-    console.log('Next track');
+// Next button
+document.getElementById('next-btn')?.addEventListener('click', async () => {
+    await nextTrack();
 });
 
-// Volume slider
+// =============================================================================
+// Volume Control
+// =============================================================================
+
 const volumeSlider = document.getElementById('volume-slider');
 const volumeValue = document.getElementById('volume-value');
 
@@ -42,7 +48,10 @@ if (volumeSlider && volumeValue) {
     });
 }
 
-// Bluetooth scan
+// =============================================================================
+// Bluetooth Scan
+// =============================================================================
+
 const scanBtn = document.getElementById('scan-btn');
 if (scanBtn) {
     scanBtn.addEventListener('click', async () => {
@@ -54,41 +63,110 @@ if (scanBtn) {
     });
 }
 
-// API functions
-async function playMusic() {
+// =============================================================================
+// API Functions - Media Controls (using playerctl)
+// =============================================================================
+
+async function togglePlayback() {
     try {
-        const response = await fetch('/api/music/play', {
+        playPauseBtn.disabled = true;
+        const response = await fetch('/api/media/toggle', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
         });
         const data = await response.json();
         
-        if (data.success) {
-            isPlaying = true;
-            playPauseBtn.textContent = '⏸';
-            updateTrackInfo('Playing...', 'Bluetooth Audio');
+        if (data.ok) {
+            // Refresh status to get accurate state
+            await fetchMediaStatus();
+        } else {
+            console.warn('Toggle playback:', data.output);
+            showNotification(data.output || 'No media player available', 'warning');
         }
     } catch (error) {
-        console.error('Error playing music:', error);
+        console.error('Error toggling playback:', error);
+        showNotification('Error controlling playback', 'error');
+    } finally {
+        playPauseBtn.disabled = false;
     }
 }
 
-async function pauseMusic() {
+async function previousTrack() {
     try {
-        const response = await fetch('/api/music/pause', {
+        const response = await fetch('/api/media/previous', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
         });
         const data = await response.json();
         
-        if (data.success) {
-            isPlaying = false;
-            playPauseBtn.textContent = '▶';
+        if (data.ok) {
+            showNotification('Previous track', 'success');
+            // Refresh status after a short delay
+            setTimeout(fetchMediaStatus, 500);
+        } else {
+            showNotification(data.output || 'Cannot go to previous track', 'warning');
         }
     } catch (error) {
-        console.error('Error pausing music:', error);
+        console.error('Error going to previous track:', error);
     }
 }
+
+async function nextTrack() {
+    try {
+        const response = await fetch('/api/media/next', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        const data = await response.json();
+        
+        if (data.ok) {
+            showNotification('Next track', 'success');
+            // Refresh status after a short delay
+            setTimeout(fetchMediaStatus, 500);
+        } else {
+            showNotification(data.output || 'Cannot skip track', 'warning');
+        }
+    } catch (error) {
+        console.error('Error going to next track:', error);
+    }
+}
+
+async function fetchMediaStatus() {
+    try {
+        const response = await fetch('/api/media/status');
+        const data = await response.json();
+        
+        if (data.ok) {
+            isPlaying = data.is_playing;
+            
+            // Update play/pause button icon
+            if (playPauseBtn) {
+                playPauseBtn.textContent = isPlaying ? '⏸' : '▶';
+            }
+            
+            // Update track info
+            if (data.title || data.artist) {
+                updateTrackInfo(
+                    data.title || 'Unknown Track',
+                    data.artist || 'Unknown Artist'
+                );
+            } else if (data.status === 'Playing' || data.status === 'Paused') {
+                updateTrackInfo(data.status, connectedDeviceName || 'Bluetooth Audio');
+            }
+        } else {
+            // No media player available
+            if (playPauseBtn) {
+                playPauseBtn.textContent = '▶';
+            }
+        }
+    } catch (error) {
+        console.error('Error fetching media status:', error);
+    }
+}
+
+// =============================================================================
+// API Functions - Volume (local system)
+// =============================================================================
 
 async function setVolume(volume) {
     try {
@@ -103,6 +181,10 @@ async function setVolume(volume) {
         console.error('Error setting volume:', error);
     }
 }
+
+// =============================================================================
+// Bluetooth Device Scanning & Display
+// =============================================================================
 
 async function scanBluetoothDevices() {
     try {
@@ -139,14 +221,20 @@ function displayDevices(devices) {
     devices.forEach(device => {
         const deviceItem = document.createElement('div');
         deviceItem.className = 'device-item';
+        deviceItem.id = `device-${device.address.replace(/:/g, '-')}`;
         
         // Signal strength indicator (if available)
         let signalIndicator = '';
         if (device.rssi !== null && device.rssi !== undefined) {
-            const signalStrength = device.rssi > -50 ? '📶' : device.rssi > -70 ? '📶' : '📶';
             const signalQuality = device.rssi > -50 ? 'Excellent' : device.rssi > -70 ? 'Good' : 'Weak';
-            signalIndicator = `<span style="color: #888; font-size: 0.8em;">${signalStrength} ${signalQuality} (${device.rssi} dBm)</span>`;
+            const signalColor = device.rssi > -50 ? '#4CAF50' : device.rssi > -70 ? '#FFC107' : '#f44336';
+            signalIndicator = `<span style="color: ${signalColor}; font-size: 0.8em;">📶 ${signalQuality} (${device.rssi} dBm)</span>`;
         }
+        
+        // Check if this device is currently connected
+        const isConnected = connectedDeviceAddress === device.address;
+        const buttonText = isConnected ? 'Disconnect' : 'Connect';
+        const buttonClass = isConnected ? 'btn-disconnect' : 'btn-connect';
         
         deviceItem.innerHTML = `
             <div style="flex: 1;">
@@ -154,14 +242,35 @@ function displayDevices(devices) {
                 <small style="color: #888;">${device.address}</small><br>
                 ${signalIndicator}
             </div>
-            <button onclick="connectDevice('${device.address}')" style="white-space: nowrap;">Connect</button>
+            <button 
+                id="btn-${device.address.replace(/:/g, '-')}"
+                class="${buttonClass}"
+                onclick="${isConnected ? `disconnectDevice('${device.address}')` : `connectDevice('${device.address}', '${device.name}')`}"
+                style="white-space: nowrap;">
+                ${buttonText}
+            </button>
         `;
         deviceList.appendChild(deviceItem);
     });
 }
 
-async function connectDevice(address) {
+// =============================================================================
+// Bluetooth Connect/Disconnect
+// =============================================================================
+
+async function connectDevice(address, name) {
+    const btnId = `btn-${address.replace(/:/g, '-')}`;
+    const btn = document.getElementById(btnId);
+    
     try {
+        // Update button state
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = 'Connecting...';
+        }
+        
+        showNotification(`Connecting to ${name}...`, 'info');
+        
         const response = await fetch('/api/bluetooth/connect', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -170,40 +279,271 @@ async function connectDevice(address) {
         const data = await response.json();
         
         if (data.success) {
-            alert('Connected successfully!');
-            updateTrackInfo('Connected', 'Bluetooth Device');
+            connectedDeviceAddress = address;
+            connectedDeviceName = name;
+            
+            showNotification(`Connected to ${name}!`, 'success');
+            updateTrackInfo('Connected', name);
+            updateConnectionStatus(true, name);
+            
+            // Update button to show Disconnect
+            if (btn) {
+                btn.textContent = 'Disconnect';
+                btn.className = 'btn-disconnect';
+                btn.onclick = () => disconnectDevice(address);
+            }
+            
+            // Start polling media status
+            startMediaStatusPolling();
+            
         } else {
-            alert('Connection failed: ' + data.message);
+            showNotification(data.message || 'Connection failed', 'error');
+            
+            // Show raw output if available for debugging
+            if (data.raw_output) {
+                console.log('Connection raw output:', data.raw_output);
+            }
+            
+            // Reset button
+            if (btn) {
+                btn.textContent = 'Connect';
+                btn.className = 'btn-connect';
+            }
         }
     } catch (error) {
         console.error('Error connecting device:', error);
-        alert('Error connecting to device');
+        showNotification('Error connecting to device', 'error');
+        
+        if (btn) {
+            btn.textContent = 'Connect';
+            btn.className = 'btn-connect';
+        }
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+        }
     }
 }
+
+async function disconnectDevice(address) {
+    const btnId = `btn-${address.replace(/:/g, '-')}`;
+    const btn = document.getElementById(btnId);
+    
+    try {
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = 'Disconnecting...';
+        }
+        
+        const response = await fetch('/api/bluetooth/disconnect', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ address })
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            connectedDeviceAddress = null;
+            connectedDeviceName = null;
+            
+            showNotification('Disconnected', 'success');
+            updateTrackInfo('No track playing', 'Connect a device to play music');
+            updateConnectionStatus(false);
+            
+            // Stop polling
+            stopMediaStatusPolling();
+            
+            // Update button
+            if (btn) {
+                btn.textContent = 'Connect';
+                btn.className = 'btn-connect';
+                btn.onclick = () => connectDevice(address, 'Device');
+            }
+        } else {
+            showNotification(data.message || 'Disconnect failed', 'error');
+        }
+    } catch (error) {
+        console.error('Error disconnecting device:', error);
+        showNotification('Error disconnecting', 'error');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+        }
+    }
+}
+
+// Make functions available globally
+window.connectDevice = connectDevice;
+window.disconnectDevice = disconnectDevice;
+
+// =============================================================================
+// Media Status Polling
+// =============================================================================
+
+function startMediaStatusPolling() {
+    // Poll every 2 seconds
+    if (statusPollInterval) {
+        clearInterval(statusPollInterval);
+    }
+    statusPollInterval = setInterval(fetchMediaStatus, 2000);
+    
+    // Fetch immediately
+    fetchMediaStatus();
+}
+
+function stopMediaStatusPolling() {
+    if (statusPollInterval) {
+        clearInterval(statusPollInterval);
+        statusPollInterval = null;
+    }
+}
+
+// =============================================================================
+// UI Helpers
+// =============================================================================
 
 function updateTrackInfo(title, artist) {
     const titleElement = document.getElementById('track-title');
     const artistElement = document.getElementById('track-artist');
     
-    if (titleElement) titleElement.textContent = title;
-    if (artistElement) artistElement.textContent = artist;
+    if (titleElement) titleElement.textContent = title || 'No track playing';
+    if (artistElement) artistElement.textContent = artist || 'Connect a device to play music';
 }
 
-// Make connectDevice available globally
-window.connectDevice = connectDevice;
+function updateConnectionStatus(connected, deviceName = null) {
+    const indicator = document.getElementById('status-indicator');
+    const statusText = document.getElementById('status-text');
+    
+    if (indicator) {
+        indicator.style.background = connected ? '#4CAF50' : '#888';
+    }
+    
+    if (statusText) {
+        if (connected && deviceName) {
+            statusText.textContent = `Connected to ${deviceName}`;
+            statusText.style.color = '#4CAF50';
+        } else if (connected) {
+            statusText.textContent = 'Connected';
+            statusText.style.color = '#4CAF50';
+        } else {
+            statusText.textContent = 'Not connected';
+            statusText.style.color = '#888';
+        }
+    }
+}
 
-// Load initial status
+function showNotification(message, type = 'info') {
+    // Check if there's an existing notification container
+    let container = document.getElementById('notification-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'notification-container';
+        container.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            max-width: 300px;
+        `;
+        document.body.appendChild(container);
+    }
+    
+    const notification = document.createElement('div');
+    
+    const colors = {
+        success: '#4CAF50',
+        error: '#f44336',
+        warning: '#FFC107',
+        info: '#2196F3'
+    };
+    
+    notification.style.cssText = `
+        background: ${colors[type] || colors.info};
+        color: white;
+        padding: 12px 20px;
+        border-radius: 8px;
+        margin-bottom: 10px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        animation: slideIn 0.3s ease;
+        font-weight: 500;
+    `;
+    notification.textContent = message;
+    
+    container.appendChild(notification);
+    
+    // Remove after 3 seconds
+    setTimeout(() => {
+        notification.style.animation = 'slideOut 0.3s ease';
+        setTimeout(() => {
+            notification.remove();
+        }, 300);
+    }, 3000);
+}
+
+// Add animation styles
+const style = document.createElement('style');
+style.textContent = `
+    @keyframes slideIn {
+        from { transform: translateX(100%); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+    }
+    @keyframes slideOut {
+        from { transform: translateX(0); opacity: 1; }
+        to { transform: translateX(100%); opacity: 0; }
+    }
+    .btn-connect {
+        background: #667eea;
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 6px;
+        cursor: pointer;
+    }
+    .btn-connect:hover {
+        background: #5a6fd6;
+    }
+    .btn-disconnect {
+        background: #f44336;
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 6px;
+        cursor: pointer;
+    }
+    .btn-disconnect:hover {
+        background: #d32f2f;
+    }
+    button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+`;
+document.head.appendChild(style);
+
+// =============================================================================
+// Initial Load
+// =============================================================================
+
 async function loadStatus() {
     try {
+        // Check Bluetooth connection status
+        const btResponse = await fetch('/api/bluetooth/status');
+        const btData = await btResponse.json();
+        
+        if (btData.connected && btData.connected_device) {
+            connectedDeviceAddress = btData.connected_device;
+            updateTrackInfo('Connected', 'Bluetooth Device');
+            updateConnectionStatus(true, 'Bluetooth Device');
+            startMediaStatusPolling();
+        } else {
+            updateConnectionStatus(false);
+        }
+        
+        // Load volume status
         const response = await fetch('/api/status');
         const data = await response.json();
         
-        isPlaying = data.music_playing || false;
         currentVolume = data.volume || 50;
-        
-        if (playPauseBtn) {
-            playPauseBtn.textContent = isPlaying ? '⏸' : '▶';
-        }
         
         if (volumeSlider) {
             volumeSlider.value = currentVolume;
@@ -222,4 +562,3 @@ async function loadStatus() {
 }
 
 document.addEventListener('DOMContentLoaded', loadStatus);
-

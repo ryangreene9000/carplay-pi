@@ -128,6 +128,34 @@ To make the application start automatically when the Raspberry Pi boots:
 - Connect to your phone or audio device
 - Audio will automatically route through Bluetooth when connected
 
+### Bluetooth Audio Requirements (A2DP Sink)
+
+For the Raspberry Pi to receive audio from your phone (act as an A2DP sink), install these packages:
+
+```bash
+sudo apt-get install -y bluez bluez-tools pulseaudio pulseaudio-module-bluetooth playerctl
+```
+
+**Important notes:**
+- The Raspberry Pi must be configured as an A2DP audio sink
+- Your phone acts as the A2DP source (sends audio to the Pi)
+- Pairing may require confirmation on both devices
+- `playerctl` is used to control media playback (play/pause/next/previous)
+
+**To make the Pi discoverable for pairing:**
+```bash
+bluetoothctl
+# Then in bluetoothctl:
+power on
+discoverable on
+pairable on
+agent on
+default-agent
+# Wait for your phone to find "raspberrypi" and pair
+```
+
+After pairing, PulseAudio should automatically route audio from the connected phone.
+
 ### Map Location
 - Default map location is set to Toronto, Canada
 - Edit `modules/map_module.py` to change default location
