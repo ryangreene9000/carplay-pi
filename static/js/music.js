@@ -126,19 +126,35 @@ function displayDevices(devices) {
     deviceList.innerHTML = '';
     
     if (devices.length === 0) {
-        deviceList.innerHTML = '<p>No devices found. Make sure Bluetooth is enabled on your devices.</p>';
+        deviceList.innerHTML = '<p style="color: #666; text-align: center; padding: 20px;">No devices found. Make sure Bluetooth is enabled on nearby devices.</p>';
         return;
     }
+    
+    // Show device count
+    const countInfo = document.createElement('p');
+    countInfo.style.cssText = 'color: #667eea; font-weight: 600; margin-bottom: 15px;';
+    countInfo.textContent = `Found ${devices.length} device${devices.length !== 1 ? 's' : ''}`;
+    deviceList.appendChild(countInfo);
     
     devices.forEach(device => {
         const deviceItem = document.createElement('div');
         deviceItem.className = 'device-item';
+        
+        // Signal strength indicator (if available)
+        let signalIndicator = '';
+        if (device.rssi !== null && device.rssi !== undefined) {
+            const signalStrength = device.rssi > -50 ? '📶' : device.rssi > -70 ? '📶' : '📶';
+            const signalQuality = device.rssi > -50 ? 'Excellent' : device.rssi > -70 ? 'Good' : 'Weak';
+            signalIndicator = `<span style="color: #888; font-size: 0.8em;">${signalStrength} ${signalQuality} (${device.rssi} dBm)</span>`;
+        }
+        
         deviceItem.innerHTML = `
-            <div>
+            <div style="flex: 1;">
                 <strong>${device.name}</strong><br>
-                <small>${device.address}</small>
+                <small style="color: #888;">${device.address}</small><br>
+                ${signalIndicator}
             </div>
-            <button onclick="connectDevice('${device.address}')">Connect</button>
+            <button onclick="connectDevice('${device.address}')" style="white-space: nowrap;">Connect</button>
         `;
         deviceList.appendChild(deviceItem);
     });

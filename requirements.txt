@@ -5,4 +5,5 @@ python-dotenv==1.0.0
 folium==0.15.0
 geopy==2.4.1
 certifi>=2023.0.0
+bleak>=0.21.0
 
