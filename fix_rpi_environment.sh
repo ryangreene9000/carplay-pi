@@ -92,12 +92,12 @@ sudo apt-get install -y bluez-tools 2>/dev/null || print_warning "bluez-tools no
 print_success "System dependencies installed"
 
 # =============================================================================
-# Step 2b: Install playerctl from source (not in apt on Bookworm)
+# Step 2b: Install playerctl (optional - for media controls)
 # =============================================================================
-print_header "Step 1b/8: Installing playerctl from source"
+print_header "Step 1b/8: Installing playerctl (optional)"
 
-echo "playerctl is not available in Raspberry Pi OS apt repositories."
-echo "Building from source..."
+echo "playerctl enables media controls (play/pause/next/prev) for Bluetooth audio."
+echo "This is OPTIONAL - the app will work without it."
 
 # Check if playerctl is already installed
 if command -v playerctl &> /dev/null; then
@@ -105,64 +105,62 @@ if command -v playerctl &> /dev/null; then
     print_success "playerctl already installed (version: $EXISTING_VERSION)"
 else
     echo ""
-    echo "Installing build dependencies for playerctl..."
-    sudo apt-get install -y \
-        meson \
-        ninja-build \
-        pkg-config \
-        libglib2.0-dev \
-        libglib2.0-0 \
-        wget \
-        unzip
+    echo "Attempting to install playerctl..."
     
-    # GObject introspection - try different package names for different Debian versions
-    echo "Installing GObject introspection (optional)..."
-    sudo apt-get install -y libgirepository-1.0-dev 2>/dev/null || \
-    sudo apt-get install -y libgirepository1.0-dev 2>/dev/null || \
-    sudo apt-get install -y gir1.2-glib-2.0 2>/dev/null || \
-    print_warning "GObject introspection not found - building without it"
-
-    # Fetch and build playerctl
-    cd /tmp
-    PLAYERCTL_VERSION="2.4.1"
-    
-    echo ""
-    echo "Downloading playerctl v${PLAYERCTL_VERSION}..."
-    rm -rf playerctl.zip playerctl-${PLAYERCTL_VERSION} 2>/dev/null || true
-    wget -q https://github.com/altdesktop/playerctl/archive/refs/tags/v${PLAYERCTL_VERSION}.zip -O playerctl.zip
-    
-    if [[ ! -f playerctl.zip ]]; then
-        print_error "Failed to download playerctl"
+    # First try apt (might work on some systems)
+    if sudo apt-get install -y playerctl 2>/dev/null; then
+        print_success "playerctl installed via apt"
     else
-        echo "Extracting..."
-        unzip -q playerctl.zip
-        cd playerctl-${PLAYERCTL_VERSION}
+        echo "playerctl not in apt, trying to build from source..."
         
-        echo "Building with Meson/Ninja..."
-        # Disable introspection and gtk-doc to minimize dependencies
-        meson setup build --prefix=/usr -Dintrospection=false -Dgtk-doc=false
-        ninja -C build
+        # Check if we can install build dependencies
+        BUILD_DEPS_OK=true
+        sudo apt-get install -y meson ninja-build pkg-config wget unzip 2>/dev/null || BUILD_DEPS_OK=false
         
-        echo "Installing..."
-        sudo ninja -C build install
+        # Try to install libglib2.0-dev (this often fails due to repo mismatches)
+        if ! sudo apt-get install -y libglib2.0-dev 2>/dev/null; then
+            print_warning "Cannot install libglib2.0-dev (repository version mismatch)"
+            print_warning "Skipping playerctl - media controls will not work"
+            BUILD_DEPS_OK=false
+        fi
         
-        # Update library cache
-        sudo ldconfig
+        if [[ "$BUILD_DEPS_OK" == "true" ]]; then
+            # Fetch and build playerctl
+            cd /tmp
+            PLAYERCTL_VERSION="2.4.1"
+            
+            echo "Downloading playerctl v${PLAYERCTL_VERSION}..."
+            rm -rf playerctl.zip playerctl-${PLAYERCTL_VERSION} 2>/dev/null || true
+            wget -q https://github.com/altdesktop/playerctl/archive/refs/tags/v${PLAYERCTL_VERSION}.zip -O playerctl.zip
+            
+            if [[ -f playerctl.zip ]]; then
+                echo "Extracting..."
+                unzip -q playerctl.zip
+                cd playerctl-${PLAYERCTL_VERSION}
+                
+                echo "Building with Meson/Ninja..."
+                if meson setup build --prefix=/usr -Dintrospection=false -Dgtk-doc=false 2>/dev/null; then
+                    ninja -C build
+                    sudo ninja -C build install
+                    sudo ldconfig
+                fi
+                
+                cd /tmp
+                rm -rf playerctl.zip playerctl-${PLAYERCTL_VERSION}
+            fi
+            
+            cd "$SCRIPT_DIR"
+        fi
         
-        cd /tmp
-        rm -rf playerctl.zip playerctl-${PLAYERCTL_VERSION}
-    fi
-    
-    # Return to script directory
-    cd "$SCRIPT_DIR"
-    
-    # Verify installation
-    if command -v playerctl &> /dev/null; then
-        INSTALLED_VERSION=$(playerctl --version 2>/dev/null || echo "unknown")
-        print_success "playerctl installed successfully (version: $INSTALLED_VERSION)"
-    else
-        print_error "playerctl installation failed!"
-        echo "  Media controls may not work. Try installing manually."
+        # Final check
+        if command -v playerctl &> /dev/null; then
+            INSTALLED_VERSION=$(playerctl --version 2>/dev/null || echo "unknown")
+            print_success "playerctl installed (version: $INSTALLED_VERSION)"
+        else
+            print_warning "playerctl not installed - media controls will be disabled"
+            echo "  The app will still work for Bluetooth scanning/connecting."
+            echo "  To fix later, resolve the libglib2.0-dev package conflict."
+        fi
     fi
 fi
 
