@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Car Stereo GPS Bridge</title>
+    <link rel="apple-touch-icon" href="/static/icons/gps-icon.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            color: white;
+        }
+        
+        .container {
+            text-align: center;
+            max-width: 400px;
+            width: 100%;
+        }
+        
+        .icon {
+            font-size: 80px;
+            margin-bottom: 20px;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.1); opacity: 0.8; }
+        }
+        
+        h1 {
+            font-size: 1.8em;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+        
+        .subtitle {
+            color: rgba(255, 255, 255, 0.7);
+            margin-bottom: 30px;
+            font-size: 1em;
+        }
+        
+        .status-card {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            padding: 25px;
+            margin-bottom: 20px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 15px;
+        }
+        
+        .status-dot {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #e74c3c;
+            transition: background 0.3s;
+        }
+        
+        .status-dot.active {
+            background: #2ecc71;
+            box-shadow: 0 0 20px rgba(46, 204, 113, 0.5);
+            animation: glow 1.5s infinite alternate;
+        }
+        
+        @keyframes glow {
+            from { box-shadow: 0 0 10px rgba(46, 204, 113, 0.5); }
+            to { box-shadow: 0 0 25px rgba(46, 204, 113, 0.8); }
+        }
+        
+        .status-text {
+            font-size: 1.2em;
+            font-weight: 600;
+        }
+        
+        .location-info {
+            font-size: 0.9em;
+            color: rgba(255, 255, 255, 0.8);
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .location-info p {
+            margin: 8px 0;
+        }
+        
+        .coords {
+            font-family: 'SF Mono', 'Monaco', monospace;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 8px 15px;
+            border-radius: 10px;
+            margin-top: 10px;
+            display: inline-block;
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            border-radius: 30px;
+            font-size: 1.1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, opacity 0.2s;
+            width: 100%;
+            max-width: 280px;
+        }
+        
+        .btn:active {
+            transform: scale(0.98);
+        }
+        
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        .btn.stop {
+            background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+        }
+        
+        .error-msg {
+            background: rgba(231, 76, 60, 0.2);
+            border: 1px solid rgba(231, 76, 60, 0.5);
+            color: #ff6b6b;
+            padding: 15px;
+            border-radius: 12px;
+            margin-top: 20px;
+            font-size: 0.9em;
+        }
+        
+        .instructions {
+            margin-top: 30px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            text-align: left;
+            font-size: 0.85em;
+            color: rgba(255, 255, 255, 0.7);
+        }
+        
+        .instructions h3 {
+            color: white;
+            margin-bottom: 10px;
+            font-size: 1em;
+        }
+        
+        .instructions ol {
+            padding-left: 20px;
+        }
+        
+        .instructions li {
+            margin: 8px 0;
+        }
+        
+        .update-counter {
+            font-size: 0.8em;
+            color: rgba(255, 255, 255, 0.5);
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="icon">📍</div>
+        <h1>GPS Bridge Active</h1>
+        <p class="subtitle">Sharing your location with Car Stereo</p>
+        
+        <div class="status-card">
+            <div class="status-indicator">
+                <div class="status-dot" id="statusDot"></div>
+                <span class="status-text" id="statusText">Initializing...</span>
+            </div>
+            
+            <div class="location-info" id="locationInfo" style="display: none;">
+                <p>📍 Current Location:</p>
+                <div class="coords" id="coordsDisplay">--</div>
+                <p id="accuracyDisplay"></p>
+                <div class="update-counter" id="updateCounter">Updates: 0</div>
+            </div>
+        </div>
+        
+        <button class="btn" id="toggleBtn" onclick="toggleTracking()">
+            Start Sharing
+        </button>
+        
+        <div class="error-msg" id="errorMsg" style="display: none;"></div>
+        
+        <div class="instructions">
+            <h3>📱 How it works:</h3>
+            <ol>
+                <li>Tap "Start Sharing" to begin</li>
+                <li>Allow location access when prompted</li>
+                <li>Keep this page open on your iPhone</li>
+                <li>Your car stereo will show your location on the map</li>
+            </ol>
+        </div>
+    </div>
+    
+    <script>
+        let isTracking = false;
+        let watchId = null;
+        let updateCount = 0;
+        let lastPostTime = 0;
+        const POST_INTERVAL = 1000; // Post location every 1 second
+        
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+        const locationInfo = document.getElementById('locationInfo');
+        const coordsDisplay = document.getElementById('coordsDisplay');
+        const accuracyDisplay = document.getElementById('accuracyDisplay');
+        const updateCounter = document.getElementById('updateCounter');
+        const toggleBtn = document.getElementById('toggleBtn');
+        const errorMsg = document.getElementById('errorMsg');
+        
+        function toggleTracking() {
+            if (isTracking) {
+                stopTracking();
+            } else {
+                startTracking();
+            }
+        }
+        
+        function startTracking() {
+            if (!navigator.geolocation) {
+                showError('Geolocation is not supported by your browser');
+                return;
+            }
+            
+            hideError();
+            statusText.textContent = 'Requesting location...';
+            toggleBtn.disabled = true;
+            
+            // Request high accuracy location
+            const options = {
+                enableHighAccuracy: true,
+                timeout: 10000,
+                maximumAge: 0
+            };
+            
+            watchId = navigator.geolocation.watchPosition(
+                onLocationSuccess,
+                onLocationError,
+                options
+            );
+            
+            isTracking = true;
+            toggleBtn.disabled = false;
+            toggleBtn.textContent = 'Stop Sharing';
+            toggleBtn.classList.add('stop');
+        }
+        
+        function stopTracking() {
+            if (watchId !== null) {
+                navigator.geolocation.clearWatch(watchId);
+                watchId = null;
+            }
+            
+            isTracking = false;
+            statusDot.classList.remove('active');
+            statusText.textContent = 'Stopped';
+            toggleBtn.textContent = 'Start Sharing';
+            toggleBtn.classList.remove('stop');
+        }
+        
+        function onLocationSuccess(position) {
+            const { latitude, longitude, accuracy } = position.coords;
+            
+            // Update UI
+            statusDot.classList.add('active');
+            statusText.textContent = 'Sharing Location';
+            locationInfo.style.display = 'block';
+            coordsDisplay.textContent = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+            accuracyDisplay.textContent = `Accuracy: ±${accuracy.toFixed(0)}m`;
+            
+            // Throttle posts to server
+            const now = Date.now();
+            if (now - lastPostTime >= POST_INTERVAL) {
+                postLocation(latitude, longitude, accuracy);
+                lastPostTime = now;
+            }
+        }
+        
+        function onLocationError(error) {
+            let message;
+            switch (error.code) {
+                case error.PERMISSION_DENIED:
+                    message = 'Location permission denied. Please enable location access in Settings.';
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    message = 'Location unavailable. Make sure Location Services are enabled.';
+                    break;
+                case error.TIMEOUT:
+                    message = 'Location request timed out. Trying again...';
+                    break;
+                default:
+                    message = 'Unable to get location: ' + error.message;
+            }
+            
+            showError(message);
+            statusText.textContent = 'Error';
+            statusDot.classList.remove('active');
+        }
+        
+        async function postLocation(lat, lon, accuracy) {
+            try {
+                const response = await fetch('/api/phone/location', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        lat: lat,
+                        lon: lon,
+                        accuracy: accuracy,
+                        timestamp: new Date().toISOString()
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.ok) {
+                    updateCount++;
+                    updateCounter.textContent = `Updates: ${updateCount}`;
+                    hideError();
+                } else {
+                    console.error('Server rejected location:', data.error);
+                }
+            } catch (err) {
+                console.error('Failed to post location:', err);
+                // Don't show error for network issues during active tracking
+                // Just keep trying
+            }
+        }
+        
+        function showError(message) {
+            errorMsg.textContent = message;
+            errorMsg.style.display = 'block';
+        }
+        
+        function hideError() {
+            errorMsg.style.display = 'none';
+        }
+        
+        // Check if page was reloaded while tracking was active
+        // (doesn't really apply since watchPosition doesn't persist)
+        statusText.textContent = 'Ready';
+    </script>
+</body>
+</html>
+

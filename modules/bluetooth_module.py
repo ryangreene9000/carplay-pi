@@ -34,6 +34,19 @@ except ImportError:
 
 
 class BluetoothManager:
+    # Class-level storage for connected device type
+    connected_device_type = 'unknown'  # 'iphone', 'android', or 'unknown'
+    connected_device_name = None
+    
+    # Known manufacturer IDs for device detection
+    APPLE_COMPANY_ID = 76        # 0x004C
+    SAMSUNG_COMPANY_ID = 117
+    GOOGLE_COMPANY_ID = 224
+    MICROSOFT_COMPANY_ID = 6
+    HUAWEI_COMPANY_ID = 637
+    XIAOMI_COMPANY_ID = 343
+    ONEPLUS_COMPANY_ID = 687
+    
     def __init__(self):
         self.connected_device = None
         self.connected_client = None
@@ -250,10 +263,27 @@ class BluetoothManager:
                 if connected:
                     self.connected_device = device_address
                     self.is_connected_flag = True
+                    
+                    # Detect device type from bluetoothctl output
+                    # Look for device name in output
+                    device_name = None
+                    for line in out.split('\n'):
+                        if 'Name:' in line:
+                            device_name = line.split('Name:')[-1].strip()
+                            break
+                        elif 'Device' in line and device_address in line:
+                            # Try to extract name from device line
+                            parts = line.split(device_address)
+                            if len(parts) > 1:
+                                device_name = parts[-1].strip()
+                    
+                    BluetoothManager.set_connected_device_info(device_address, name=device_name)
+                    
                     return {
                         'success': True,
                         'message': f'Connected to {device_address}',
                         'address': device_address,
+                        'device_type': BluetoothManager.connected_device_type,
                         'raw_output': out
                     }
                 else:
@@ -331,6 +361,9 @@ class BluetoothManager:
             self.connected_client = None
             self.is_connected_flag = False
             
+            # Clear device type info
+            BluetoothManager.clear_connected_device_info()
+            
             return {
                 'success': True, 
                 'message': f'Disconnected from {previous_device}' if previous_device else 'Disconnected',
@@ -366,8 +399,96 @@ class BluetoothManager:
         return {
             'available': BLEAK_AVAILABLE,
             'connected': self.is_connected_flag,
-            'connected_device': self.connected_device
+            'connected_device': self.connected_device,
+            'device_type': BluetoothManager.connected_device_type,
+            'device_name': BluetoothManager.connected_device_name
         }
+    
+    @classmethod
+    def detect_device_type(cls, device_name=None, manufacturer_id=None, device_address=None):
+        """
+        Detect if a device is an iPhone, Android, or unknown.
+        
+        Args:
+            device_name: Name of the device (e.g., "John's iPhone")
+            manufacturer_id: Bluetooth manufacturer ID from advertisement data
+            device_address: MAC address (can help identify vendor)
+            
+        Returns:
+            'iphone', 'android', or 'unknown'
+        """
+        device_type = 'unknown'
+        
+        # Check device name first (most reliable for named devices)
+        if device_name:
+            name_lower = device_name.lower()
+            
+            # iPhone/iPad detection
+            if any(x in name_lower for x in ['iphone', 'ipad', 'apple', 'airpods', 'macbook', 'apple watch']):
+                device_type = 'iphone'
+            
+            # Android device detection
+            elif any(x in name_lower for x in [
+                'pixel', 'galaxy', 'samsung', 'oneplus', 'android', 
+                'huawei', 'xiaomi', 'redmi', 'poco', 'oppo', 'vivo',
+                'motorola', 'moto', 'lg', 'sony', 'nokia', 'asus', 'rog'
+            ]):
+                device_type = 'android'
+        
+        # Check manufacturer ID if name didn't help
+        if device_type == 'unknown' and manufacturer_id:
+            # Apple
+            if manufacturer_id == cls.APPLE_COMPANY_ID:
+                device_type = 'iphone'
+            # Android manufacturers
+            elif manufacturer_id in [
+                cls.SAMSUNG_COMPANY_ID, cls.GOOGLE_COMPANY_ID,
+                cls.HUAWEI_COMPANY_ID, cls.XIAOMI_COMPANY_ID, cls.ONEPLUS_COMPANY_ID
+            ]:
+                device_type = 'android'
+        
+        # Check MAC address prefix for vendor (OUI)
+        if device_type == 'unknown' and device_address:
+            # Apple OUI prefixes (partial list)
+            apple_prefixes = ['00:1C:B3', 'A4:D1:8C', 'A4:5E:60', '00:25:00', 
+                              'E0:5F:45', 'F8:1E:DF', 'AC:BC:32', '28:6A:BA']
+            # Samsung OUI prefixes
+            samsung_prefixes = ['00:1D:F6', '00:1E:75', '58:CB:52', 'CC:07:AB']
+            # Google OUI prefixes
+            google_prefixes = ['F4:F5:D8', '54:60:09', '94:EB:2C']
+            
+            addr_upper = device_address.upper()[:8]
+            
+            if any(addr_upper.startswith(p) for p in apple_prefixes):
+                device_type = 'iphone'
+            elif any(addr_upper.startswith(p) for p in samsung_prefixes + google_prefixes):
+                device_type = 'android'
+        
+        return device_type
+    
+    @classmethod
+    def set_connected_device_info(cls, address, name=None, manufacturer_id=None):
+        """
+        Set the connected device info and detect its type.
+        
+        Args:
+            address: MAC address of the connected device
+            name: Device name if known
+            manufacturer_id: Manufacturer ID from BLE advertisement
+        """
+        cls.connected_device_name = name
+        cls.connected_device_type = cls.detect_device_type(
+            device_name=name,
+            manufacturer_id=manufacturer_id,
+            device_address=address
+        )
+        print(f"Connected device detected as: {cls.connected_device_type} (name: {name})")
+    
+    @classmethod
+    def clear_connected_device_info(cls):
+        """Clear stored device info on disconnect."""
+        cls.connected_device_type = 'unknown'
+        cls.connected_device_name = None
     
     @staticmethod
     def get_phone_location():

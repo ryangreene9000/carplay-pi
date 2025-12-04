@@ -102,6 +102,14 @@ def index():
     """Main menu screen"""
     return render_template('main_menu.html')
 
+@app.route('/ios_bridge')
+def ios_bridge():
+    """
+    Web-based GPS bridge for iPhone.
+    Open this page on the iPhone's Safari browser to share location with the car stereo.
+    """
+    return render_template('ios_bridge.html')
+
 @app.route('/music')
 def music_screen():
     """Music player screen"""
@@ -444,14 +452,61 @@ def get_route():
 
 @app.route('/api/location/phone')
 def phone_location():
-    """Get location from connected Bluetooth phone (if available)"""
+    """Get location from connected Bluetooth phone (iPhone or Android)"""
     try:
-        loc = bluetooth.get_phone_location()
+        from modules.phone_location import PhoneLocation
+        loc = PhoneLocation.get_location()
         if loc:
-            return jsonify({"ok": True, "lat": loc["lat"], "lon": loc["lon"], "source": "phone"})
+            return jsonify({
+                "ok": True,
+                "lat": loc["lat"],
+                "lon": loc["lon"],
+                "accuracy": loc.get("accuracy"),
+                "source": loc.get("source", "phone"),
+                "age_seconds": loc.get("age_seconds", 0),
+                "device_type": bluetooth.connected_device_type
+            })
         return jsonify({"ok": False, "message": "Phone location not available"})
     except Exception as e:
+        logging.error(f"Phone location error: {e}")
         return jsonify({"ok": False, "message": str(e)})
+
+@app.route('/api/phone/location', methods=['POST'])
+def update_phone_location():
+    """
+    Endpoint for iPhone web bridge to POST GPS location.
+    Expected JSON: {"lat": <float>, "lon": <float>, "accuracy": <float>, "timestamp": "..."}
+    """
+    try:
+        from modules.phone_location import PhoneLocation
+        data = request.json or {}
+        
+        lat = data.get('lat')
+        lon = data.get('lon')
+        
+        if lat is None or lon is None:
+            return jsonify({"ok": False, "error": "Missing lat/lon"}), 400
+        
+        PhoneLocation.update_ios_location(
+            lat=lat,
+            lon=lon,
+            accuracy=data.get('accuracy'),
+            timestamp=data.get('timestamp')
+        )
+        
+        return jsonify({"ok": True, "message": "Location updated"})
+    except Exception as e:
+        logging.error(f"Phone location update error: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+@app.route('/api/phone/location/status')
+def phone_location_status():
+    """Get status of phone location providers"""
+    try:
+        from modules.phone_location import PhoneLocation
+        return jsonify(PhoneLocation.get_status())
+    except Exception as e:
+        return jsonify({"error": str(e)})
 
 @app.route('/api/location/pi')
 def pi_location():
@@ -476,14 +531,17 @@ def pi_location():
 def current_location():
     """Get best available location (phone -> Pi -> default)"""
     try:
-        # Try phone location first
-        phone_loc = bluetooth.get_phone_location()
+        # Try phone location first (using PhoneLocation for iPhone/Android)
+        from modules.phone_location import PhoneLocation
+        phone_loc = PhoneLocation.get_location()
         if phone_loc:
             return jsonify({
                 "ok": True,
                 "lat": phone_loc["lat"],
                 "lon": phone_loc["lon"],
-                "source": "phone"
+                "accuracy": phone_loc.get("accuracy"),
+                "source": phone_loc.get("source", "phone"),
+                "device_type": bluetooth.connected_device_type
             })
         
         # Try Pi location (GPS or IP)
