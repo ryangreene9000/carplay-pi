@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Map Navigation</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" 
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" 
+          crossorigin="">
+    <style>
+        #map {
+            height: 400px;
+            width: 100%;
+            border-radius: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .map-controls {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .route-input {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .route-input input {
+            padding: 15px;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            font-size: 1em;
+            transition: border-color 0.3s;
+        }
+        
+        .route-input input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .location-info {
+            display: flex;
+            justify-content: space-between;
+            padding: 15px;
+            background: #f5f5f5;
+            border-radius: 10px;
+            margin-top: 15px;
+        }
+        
+        .location-info span {
+            color: #666;
+        }
+        
+        .location-info strong {
+            color: #333;
+        }
+        
+        .quick-locations {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-top: 20px;
+        }
+        
+        .quick-btn {
+            padding: 12px;
+            border: 2px solid #667eea;
+            border-radius: 10px;
+            background: white;
+            color: #667eea;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .quick-btn:active {
+            background: #667eea;
+            color: white;
+            transform: scale(0.95);
+        }
+    </style>
+</head>
+<body class="map-screen">
+    <div class="container">
+        <header>
+            <a href="/" class="back-button">← Back</a>
+            <h1>🗺️ Map Navigation</h1>
+        </header>
+        
+        <main class="map-container">
+            <!-- Map Display -->
+            <div id="map"></div>
+            
+            <!-- Map Controls -->
+            <div class="map-controls">
+                <h3>Route Planning</h3>
+                <div class="route-input">
+                    <input type="text" id="origin-input" placeholder="📍 e.g., 2091 Saint Francis Way, San Carlos, CA">
+                    <input type="text" id="dest-input" placeholder="🎯 e.g., 246 Highland Ave, State College, PA">
+                </div>
+                
+                <button id="route-btn" class="btn-primary">Get Directions</button>
+                <button id="locate-btn" class="btn-secondary" style="margin-top: 10px;">📍 Use My Location</button>
+                
+                <div class="location-info" id="location-info" style="display: none;">
+                    <span>Current Location:</span>
+                    <strong id="current-coords">--</strong>
+                </div>
+                
+                <div class="quick-locations">
+                    <button class="quick-btn" onclick="setDestination('gas station')">⛽ Gas Station</button>
+                    <button class="quick-btn" onclick="setDestination('restaurant')">🍽️ Restaurant</button>
+                    <button class="quick-btn" onclick="setDestination('parking')">🅿️ Parking</button>
+                    <button class="quick-btn" onclick="setDestination('hospital')">🏥 Hospital</button>
+                </div>
+            </div>
+        </main>
+        
+        <footer>
+            <div class="sensor-info">
+                <span id="temperature">--°C</span>
+                <span id="humidity">--%</span>
+            </div>
+        </footer>
+    </div>
+    
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" 
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" 
+            crossorigin=""></script>
+    <script src="{{ url_for('static', filename='js/map.js') }}"></script>
+    <script>
+        // Use My Location button
+        document.getElementById('locate-btn').addEventListener('click', () => {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const lat = position.coords.latitude.toFixed(6);
+                        const lng = position.coords.longitude.toFixed(6);
+                        document.getElementById('origin-input').value = `${lat}, ${lng}`;
+                        document.getElementById('current-coords').textContent = `${lat}, ${lng}`;
+                        document.getElementById('location-info').style.display = 'flex';
+                        
+                        // Center map on user location
+                        if (map) {
+                            map.setView([position.coords.latitude, position.coords.longitude], 15);
+                        }
+                    },
+                    (error) => {
+                        alert('Unable to get your location: ' + error.message);
+                    }
+                );
+            } else {
+                alert('Geolocation is not supported by your browser');
+            }
+        });
+        
+        // Quick destination buttons
+        function setDestination(place) {
+            document.getElementById('dest-input').value = place + ' nearby';
+        }
+    </script>
+</body>
+</html>
+
