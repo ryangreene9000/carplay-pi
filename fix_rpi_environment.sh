@@ -237,6 +237,13 @@ pip install --upgrade \
     python-dotenv \
     folium>=0.15.0
 
+# Install dbus-python for native BlueZ AVRCP media control
+echo ""
+echo "Installing dbus-python for BlueZ media control..."
+# dbus-python requires libdbus and pkg-config
+sudo apt-get install -y libdbus-1-dev libdbus-glib-1-dev 2>/dev/null || true
+pip install dbus-python>=1.3.2 || print_warning "dbus-python installation failed - media controls will use playerctl fallback"
+
 # Install PyBluez for Linux (optional, provides additional Bluetooth features)
 echo ""
 echo "Attempting to install PyBluez (Linux Bluetooth)..."

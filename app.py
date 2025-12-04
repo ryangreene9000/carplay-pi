@@ -42,6 +42,15 @@ except ImportError:
     print("Warning: geopy is not installed. Address geocoding will not work.")
     print("  Install with: pip install geopy>=2.4.1")
 
+# Check for dbus-python (BlueZ native media control)
+try:
+    import dbus
+    DBUS_AVAILABLE = True
+except ImportError:
+    DBUS_AVAILABLE = False
+    print("Warning: dbus-python is not installed. Native BlueZ media control unavailable.")
+    print("  Install with: pip install dbus-python")
+
 # =============================================================================
 # Import application modules
 # =============================================================================
@@ -52,6 +61,20 @@ from modules.music_module import MusicManager
 from modules.map_module import MapManager
 from modules.android_auto_module import AndroidAutoManager
 from modules.carplay_module import CarPlayManager
+
+# Import BlueZ native media control (preferred over playerctl)
+try:
+    from modules.bluetooth_media import (
+        run_bluez_media_command,
+        get_bluez_metadata,
+        is_bluez_player_available,
+        DBUS_AVAILABLE as BLUEZ_MEDIA_AVAILABLE
+    )
+except ImportError:
+    BLUEZ_MEDIA_AVAILABLE = False
+    run_bluez_media_command = None
+    get_bluez_metadata = None
+    is_bluez_player_available = None
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'car-stereo-secret-key-2025'
@@ -176,16 +199,42 @@ def bluetooth_status():
     return jsonify(bluetooth.get_status())
 
 # =============================================================================
-# Media Control Endpoints (using playerctl on Raspberry Pi)
-# Targets the active AVRCP/BlueZ media player for Bluetooth audio control
+# Media Control Endpoints
+# Uses native BlueZ D-Bus interface first, falls back to playerctl
 # =============================================================================
 
 import logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
+def run_media_command(bluez_cmd, playerctl_cmd):
+    """
+    Run a media command, trying BlueZ D-Bus first, then playerctl as fallback.
+    
+    Args:
+        bluez_cmd: BlueZ MediaPlayer1 method name (e.g., 'Play', 'Pause')
+        playerctl_cmd: playerctl command (e.g., 'play', 'pause')
+    
+    Returns:
+        Tuple of (success: bool, message: str)
+    """
+    # Check if we're on Linux
+    if platform.system().lower() != 'linux':
+        return False, "Media controls only available on Raspberry Pi"
+    
+    # Try BlueZ native D-Bus control first (more reliable)
+    if BLUEZ_MEDIA_AVAILABLE and run_bluez_media_command:
+        logging.debug(f"Trying BlueZ D-Bus command: {bluez_cmd}")
+        ok, msg = run_bluez_media_command(bluez_cmd)
+        if ok:
+            return ok, msg
+        logging.debug(f"BlueZ command failed: {msg}, trying playerctl...")
+    
+    # Fall back to playerctl
+    return run_playerctl_command(playerctl_cmd)
+
 def get_active_player():
     """
-    Get the first active media player (usually the BlueZ AVRCP player).
+    Get the first active media player via playerctl.
     Returns the player name or None if no players are available.
     """
     # Check if we're on Linux
@@ -209,7 +258,7 @@ def get_active_player():
             # Fall back to first available player
             logging.debug(f"Active player: {players[0]}")
             return players[0]
-        logging.debug("No active players found")
+        logging.debug("No active players found via playerctl")
         return None
     except subprocess.CalledProcessError as e:
         logging.debug(f"playerctl -l error: {e.output if e.output else 'No output'}")
@@ -223,7 +272,7 @@ def get_active_player():
 
 def run_playerctl_command(command):
     """
-    Run a playerctl command targeting the active player.
+    Run a playerctl command targeting the active player (fallback method).
     Returns (success, message).
     """
     # Check if we're on Linux
@@ -253,36 +302,61 @@ def run_playerctl_command(command):
 @app.route('/api/media/play', methods=['POST'])
 def api_media_play():
     """Send play command to connected media player"""
-    ok, msg = run_playerctl_command("play")
+    ok, msg = run_media_command("Play", "play")
     return jsonify({"ok": ok, "message": msg}), (200 if ok else 500)
 
 @app.route('/api/media/pause', methods=['POST'])
 def api_media_pause():
     """Send pause command to connected media player"""
-    ok, msg = run_playerctl_command("pause")
+    ok, msg = run_media_command("Pause", "pause")
     return jsonify({"ok": ok, "message": msg}), (200 if ok else 500)
 
 @app.route('/api/media/toggle', methods=['POST'])
 def api_media_toggle():
     """Toggle play/pause on connected media player"""
+    # BlueZ doesn't have a toggle, so we check status and send appropriate command
+    if BLUEZ_MEDIA_AVAILABLE and get_bluez_metadata:
+        metadata = get_bluez_metadata()
+        if metadata:
+            if metadata.get('is_playing'):
+                return api_media_pause()
+            else:
+                return api_media_play()
+    # Fall back to playerctl which has play-pause
     ok, msg = run_playerctl_command("play-pause")
     return jsonify({"ok": ok, "message": msg}), (200 if ok else 500)
 
 @app.route('/api/media/next', methods=['POST'])
 def api_media_next():
     """Skip to next track on connected media player"""
-    ok, msg = run_playerctl_command("next")
+    ok, msg = run_media_command("Next", "next")
     return jsonify({"ok": ok, "message": msg}), (200 if ok else 500)
 
 @app.route('/api/media/previous', methods=['POST'])
 def api_media_previous():
     """Go to previous track on connected media player"""
-    ok, msg = run_playerctl_command("previous")
+    ok, msg = run_media_command("Previous", "previous")
     return jsonify({"ok": ok, "message": msg}), (200 if ok else 500)
 
 @app.route('/api/media/status')
 def api_media_status():
     """Get current playback status from connected media player"""
+    
+    # Try BlueZ native metadata first
+    if BLUEZ_MEDIA_AVAILABLE and get_bluez_metadata:
+        metadata = get_bluez_metadata()
+        if metadata:
+            return jsonify({
+                "ok": True,
+                "status": metadata.get("status", "Unknown"),
+                "artist": metadata.get("artist", ""),
+                "title": metadata.get("title", ""),
+                "album": metadata.get("album", ""),
+                "is_playing": metadata.get("is_playing", False),
+                "source": "bluez"
+            })
+    
+    # Fall back to playerctl
     player = get_active_player()
     
     if not player:
@@ -316,7 +390,8 @@ def api_media_status():
         "title": title,
         "album": album,
         "is_playing": status.lower() == "playing" if status else False,
-        "player": player
+        "player": player,
+        "source": "playerctl"
     })
 
 @app.route('/api/map/route', methods=['POST'])
