@@ -12,6 +12,14 @@ import subprocess
 import platform
 import shutil
 
+# CORS support for iPhone Safari GPS bridge
+try:
+    from flask_cors import CORS
+    CORS_AVAILABLE = True
+except ImportError:
+    CORS_AVAILABLE = False
+    print("Warning: flask-cors not installed. iPhone GPS bridge may not work.")
+
 # =============================================================================
 # Check for optional dependencies and warn if missing
 # =============================================================================
@@ -78,6 +86,10 @@ except ImportError:
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'car-stereo-secret-key-2025'
+
+# Enable CORS for iPhone Safari GPS bridge
+if CORS_AVAILABLE:
+    CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 # Initialize managers
 sense_hat = SenseHATManager()
@@ -500,6 +512,14 @@ def phone_location_status():
         return jsonify(PhoneLocation.get_status())
     except Exception as e:
         return jsonify({"error": str(e)})
+
+@app.route('/api/debug/gps', methods=['POST'])
+def debug_gps():
+    """Debug endpoint to verify iPhone GPS is being received"""
+    data = request.json or {}
+    logging.info(f"DEBUG GPS received: lat={data.get('lat')}, lon={data.get('lon')}, accuracy={data.get('accuracy')}")
+    print(f"📍 DEBUG GPS: {data}")
+    return jsonify({"status": "ok", "received": data})
 
 @app.route('/api/location/pi')
 def pi_location():
