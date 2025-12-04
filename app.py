@@ -61,7 +61,6 @@ from modules.bluetooth_module import BluetoothManager
 from modules.music_module import MusicManager
 from modules.map_module import MapManager
 from modules.android_auto_module import AndroidAutoManager
-from modules.carplay_module import CarPlayManager
 
 # Import BlueZ native media control (preferred over playerctl)
 try:
@@ -86,7 +85,6 @@ bluetooth = BluetoothManager()
 music = MusicManager()
 map_manager = MapManager()
 android_auto = AndroidAutoManager()
-carplay = CarPlayManager()
 
 # Global state
 current_screen = 'main_menu'
@@ -129,11 +127,6 @@ def android_auto_screen():
 def settings_screen():
     """Settings screen"""
     return render_template('settings.html')
-
-@app.route('/carplay')
-def carplay_screen():
-    """CarPlay / Android Auto screen"""
-    return render_template('carplay.html')
 
 # API endpoints for system control
 @app.route('/api/status')
@@ -760,40 +753,6 @@ def start_android_auto():
 def stop_android_auto():
     """Stop Android Auto service"""
     result = android_auto.stop()
-    return jsonify(result)
-
-# CarPlay API endpoints
-@app.route('/api/carplay/status')
-def get_carplay_status():
-    """Get CarPlay status"""
-    return jsonify(carplay.get_status())
-
-@app.route('/api/carplay/start', methods=['POST'])
-def start_carplay():
-    """Start CarPlay engine"""
-    data = request.json or {}
-    fullscreen = data.get('fullscreen', True)
-    result = carplay.start(fullscreen=fullscreen)
-    return jsonify(result)
-
-@app.route('/api/carplay/stop', methods=['POST'])
-def stop_carplay():
-    """Stop CarPlay engine"""
-    result = carplay.stop()
-    return jsonify(result)
-
-@app.route('/api/carplay/restart', methods=['POST'])
-def restart_carplay():
-    """Restart CarPlay engine"""
-    result = carplay.restart()
-    return jsonify(result)
-
-@app.route('/api/carplay/key', methods=['POST'])
-def send_carplay_key():
-    """Send navigation key to CarPlay"""
-    data = request.json or {}
-    key = data.get('key', '')
-    result = carplay.send_key(key)
     return jsonify(result)
 
 def update_sense_hat_display():
