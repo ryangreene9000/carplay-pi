@@ -136,7 +136,10 @@ async function fetchMediaStatus() {
         const response = await fetch('/api/media/status');
         const data = await response.json();
         
-        if (data.ok) {
+        // Determine if we have an active media player
+        const hasActivePlayer = data && data.ok && data.status !== 'no-player';
+        
+        if (hasActivePlayer) {
             isPlaying = data.is_playing;
             
             // Update play/pause button icon
@@ -153,14 +156,22 @@ async function fetchMediaStatus() {
             } else if (data.status === 'Playing' || data.status === 'Paused') {
                 updateTrackInfo(data.status, connectedDeviceName || 'Bluetooth Audio');
             }
+            
+            // Update connection indicator to show connected (media player is active)
+            updateConnectionStatus(true, data.source === 'bluez' ? 'Bluetooth Audio' : 'Media Player');
+            
         } else {
             // No media player available
             if (playPauseBtn) {
                 playPauseBtn.textContent = '▶';
             }
+            
+            // Update connection indicator to show not connected
+            updateConnectionStatus(false);
         }
     } catch (error) {
         console.error('Error fetching media status:', error);
+        updateConnectionStatus(false);
     }
 }
 
@@ -532,11 +543,6 @@ async function loadStatus() {
         
         if (btData.connected && btData.connected_device) {
             connectedDeviceAddress = btData.connected_device;
-            updateTrackInfo('Connected', 'Bluetooth Device');
-            updateConnectionStatus(true, 'Bluetooth Device');
-            startMediaStatusPolling();
-        } else {
-            updateConnectionStatus(false);
         }
         
         // Load volume status
@@ -556,8 +562,15 @@ async function loadStatus() {
         if (data.current_track) {
             updateTrackInfo(data.current_track.title, data.current_track.artist);
         }
+        
+        // Always start polling media status on page load
+        // This will update the connection indicator based on active media player
+        startMediaStatusPolling();
+        
     } catch (error) {
         console.error('Error loading status:', error);
+        // Still try to poll media status even if initial load fails
+        startMediaStatusPolling();
     }
 }
 
