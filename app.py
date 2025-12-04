@@ -438,6 +438,148 @@ def get_route():
     route = map_manager.get_route(origin, destination)
     return jsonify(route)
 
+# =============================================================================
+# Location API Endpoints
+# =============================================================================
+
+@app.route('/api/location/phone')
+def phone_location():
+    """Get location from connected Bluetooth phone (if available)"""
+    try:
+        loc = bluetooth.get_phone_location()
+        if loc:
+            return jsonify({"ok": True, "lat": loc["lat"], "lon": loc["lon"], "source": "phone"})
+        return jsonify({"ok": False, "message": "Phone location not available"})
+    except Exception as e:
+        return jsonify({"ok": False, "message": str(e)})
+
+@app.route('/api/location/pi')
+def pi_location():
+    """Get Pi's location via GPS or IP geolocation"""
+    try:
+        from modules.location_module import PiLocation
+        loc = PiLocation.get()
+        if loc:
+            return jsonify({
+                "ok": True,
+                "lat": loc["lat"],
+                "lon": loc["lon"],
+                "source": loc.get("source", "unknown"),
+                "city": loc.get("city", ""),
+                "region": loc.get("region", "")
+            })
+        return jsonify({"ok": False, "message": "Could not determine location"})
+    except Exception as e:
+        return jsonify({"ok": False, "message": str(e)})
+
+@app.route('/api/location/current')
+def current_location():
+    """Get best available location (phone -> Pi -> default)"""
+    try:
+        # Try phone location first
+        phone_loc = bluetooth.get_phone_location()
+        if phone_loc:
+            return jsonify({
+                "ok": True,
+                "lat": phone_loc["lat"],
+                "lon": phone_loc["lon"],
+                "source": "phone"
+            })
+        
+        # Try Pi location (GPS or IP)
+        from modules.location_module import PiLocation
+        pi_loc = PiLocation.get()
+        if pi_loc:
+            return jsonify({
+                "ok": True,
+                "lat": pi_loc["lat"],
+                "lon": pi_loc["lon"],
+                "source": pi_loc.get("source", "pi"),
+                "city": pi_loc.get("city", "")
+            })
+        
+        # Fallback to default location
+        return jsonify({
+            "ok": True,
+            "lat": 43.6532,
+            "lon": -79.3832,
+            "source": "default"
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "message": str(e)})
+
+# =============================================================================
+# Places Search API (Overpass for POI)
+# =============================================================================
+
+@app.route('/api/places/nearby')
+def places_nearby():
+    """Search for places near a location using Overpass API"""
+    import requests as req
+    
+    lat = request.args.get('lat')
+    lon = request.args.get('lon')
+    place_type = request.args.get('type', 'fuel')  # fuel, restaurant, parking, hospital
+    radius = request.args.get('radius', '3000')  # meters
+    
+    if not lat or not lon:
+        return jsonify({"ok": False, "error": "Missing lat/lon parameters"})
+    
+    # Map place types to Overpass tags
+    type_mapping = {
+        'fuel': '["amenity"="fuel"]',
+        'gas': '["amenity"="fuel"]',
+        'restaurant': '["amenity"="restaurant"]',
+        'food': '["amenity"~"restaurant|fast_food|cafe"]',
+        'parking': '["amenity"="parking"]',
+        'hospital': '["amenity"="hospital"]',
+        'pharmacy': '["amenity"="pharmacy"]',
+        'atm': '["amenity"="atm"]',
+        'charging': '["amenity"="charging_station"]'
+    }
+    
+    tag = type_mapping.get(place_type, f'["amenity"="{place_type}"]')
+    
+    query = f"""
+    [out:json][timeout:10];
+    node
+      {tag}
+      (around:{radius},{lat},{lon});
+    out body;
+    """
+    
+    try:
+        response = req.post(
+            "https://overpass-api.de/api/interpreter",
+            data={"data": query},
+            headers={"User-Agent": "car_stereo_system"},
+            timeout=15
+        )
+        data = response.json()
+        
+        # Format results
+        results = []
+        for element in data.get("elements", []):
+            tags = element.get("tags", {})
+            results.append({
+                "lat": element.get("lat"),
+                "lon": element.get("lon"),
+                "name": tags.get("name", "Unknown"),
+                "brand": tags.get("brand", ""),
+                "address": tags.get("addr:street", ""),
+                "type": place_type
+            })
+        
+        return jsonify({
+            "ok": True,
+            "count": len(results),
+            "results": results
+        })
+        
+    except Exception as e:
+        logging.error(f"Overpass API error: {e}")
+        return jsonify({"ok": False, "error": str(e)})
+
 @app.route('/api/android_auto/start', methods=['POST'])
 def start_android_auto():
     """Start Android Auto service"""

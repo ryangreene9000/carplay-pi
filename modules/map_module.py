@@ -10,6 +10,7 @@ import os
 import re
 import ssl
 import certifi
+import requests
 from geopy.geocoders import Nominatim
 from geopy.exc import GeocoderTimedOut, GeocoderServiceError
 
@@ -29,9 +30,63 @@ class MapManager:
             ssl_context=ctx
         )
     
-    def geocode_address(self, address):
+    def geocode_address(self, text):
+        """
+        Convert text to (latitude, longitude) coordinates.
+        Accepts either street addresses OR coordinate pairs like "lat, lon".
+        
+        Args:
+            text: Street address OR coordinate string (e.g., "40.78, -77.86")
+            
+        Returns:
+            Tuple of (latitude, longitude) or None if failed
+        """
+        if not text or not isinstance(text, str):
+            return None
+        
+        text = text.strip()
+        
+        # First, check if it's already coordinates
+        if "," in text:
+            try:
+                parts = text.split(",")
+                if len(parts) == 2:
+                    lat = float(parts[0].strip())
+                    lon = float(parts[1].strip())
+                    if -90 <= lat <= 90 and -180 <= lon <= 180:
+                        return (lat, lon)
+            except (ValueError, IndexError):
+                pass  # Not valid coords, try geocoding
+        
+        # Try official geopy geocoder
+        try:
+            location = self.geolocator.geocode(text, timeout=10)
+            if location:
+                return (location.latitude, location.longitude)
+        except Exception as e:
+            print(f"Geopy geocoding error: {e}")
+        
+        # Fallback: direct Nominatim HTTP request
+        try:
+            import urllib.parse
+            encoded_text = urllib.parse.quote(text)
+            url = f"https://nominatim.openstreetmap.org/search?format=json&q={encoded_text}"
+            headers = {"User-Agent": "car_stereo_system_v1"}
+            response = requests.get(url, headers=headers, timeout=10)
+            results = response.json()
+            if results and len(results) > 0:
+                lat = float(results[0]["lat"])
+                lon = float(results[0]["lon"])
+                return (lat, lon)
+        except Exception as e:
+            print(f"Fallback geocoding error: {e}")
+        
+        return None
+    
+    def geocode_address_strict(self, address):
         """
         Convert a street address to (latitude, longitude) coordinates.
+        Raises ValueError if geocoding fails.
         
         Args:
             address: Street address string (e.g., "123 Main St, City, State")
@@ -42,19 +97,15 @@ class MapManager:
         Raises:
             ValueError: If address cannot be geocoded
         """
-        try:
-            location = self.geolocator.geocode(address, timeout=10)
-            if location is None:
-                raise ValueError(f"Could not geocode address: {address}")
-            return (location.latitude, location.longitude)
-        except GeocoderTimedOut:
-            raise ValueError(f"Geocoding timed out for address: {address}")
-        except GeocoderServiceError as e:
-            raise ValueError(f"Geocoding service error: {str(e)}")
+        result = self.geocode_address(address)
+        if result is None:
+            raise ValueError(f"Could not geocode address: {address}")
+        return result
     
     def parse_location_input(self, value):
         """
         Parse user input that could be either coordinates or a street address.
+        Uses the robust geocode_address method with fallbacks.
         
         Args:
             value: String that is either:
@@ -63,35 +114,17 @@ class MapManager:
                    
         Returns:
             Tuple of (latitude, longitude) as floats
+            
+        Raises:
+            ValueError: If location cannot be parsed or geocoded
         """
         if not value or not isinstance(value, str):
             raise ValueError("Location input cannot be empty")
         
-        value = value.strip()
-        
-        # Check if it looks like coordinates (two numbers separated by comma)
-        # Pattern: optional negative, digits, optional decimal, comma, same pattern
-        coord_pattern = r'^-?\d+\.?\d*\s*,\s*-?\d+\.?\d*$'
-        
-        if re.match(coord_pattern, value):
-            # It's coordinates - parse them
-            parts = value.split(',')
-            try:
-                lat = float(parts[0].strip())
-                lon = float(parts[1].strip())
-                
-                # Validate coordinate ranges
-                if not (-90 <= lat <= 90):
-                    raise ValueError(f"Latitude must be between -90 and 90, got {lat}")
-                if not (-180 <= lon <= 180):
-                    raise ValueError(f"Longitude must be between -180 and 180, got {lon}")
-                    
-                return (lat, lon)
-            except (ValueError, IndexError) as e:
-                raise ValueError(f"Invalid coordinate format: {value}")
-        else:
-            # It's an address - geocode it
-            return self.geocode_address(value)
+        result = self.geocode_address(value)
+        if result is None:
+            raise ValueError(f"Could not find location: {value}")
+        return result
     
     def get_route(self, origin, destination):
         """

@@ -115,10 +115,10 @@
                 </div>
                 
                 <div class="quick-locations">
-                    <button class="quick-btn" onclick="setDestination('gas station')">⛽ Gas Station</button>
-                    <button class="quick-btn" onclick="setDestination('restaurant')">🍽️ Restaurant</button>
-                    <button class="quick-btn" onclick="setDestination('parking')">🅿️ Parking</button>
-                    <button class="quick-btn" onclick="setDestination('hospital')">🏥 Hospital</button>
+                    <button class="quick-btn" onclick="searchNearbyPlaces('fuel')">⛽ Gas Stations</button>
+                    <button class="quick-btn" onclick="searchNearbyPlaces('restaurant')">🍽️ Restaurants</button>
+                    <button class="quick-btn" onclick="searchNearbyPlaces('parking')">🅿️ Parking</button>
+                    <button class="quick-btn" onclick="searchNearbyPlaces('hospital')">🏥 Hospitals</button>
                 </div>
             </div>
         </main>
@@ -136,37 +136,6 @@
             integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" 
             crossorigin=""></script>
     <script src="{{ url_for('static', filename='js/map.js') }}"></script>
-    <script>
-        // Use My Location button
-        document.getElementById('locate-btn').addEventListener('click', () => {
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                    (position) => {
-                        const lat = position.coords.latitude.toFixed(6);
-                        const lng = position.coords.longitude.toFixed(6);
-                        document.getElementById('origin-input').value = `${lat}, ${lng}`;
-                        document.getElementById('current-coords').textContent = `${lat}, ${lng}`;
-                        document.getElementById('location-info').style.display = 'flex';
-                        
-                        // Center map on user location
-                        if (map) {
-                            map.setView([position.coords.latitude, position.coords.longitude], 15);
-                        }
-                    },
-                    (error) => {
-                        alert('Unable to get your location: ' + error.message);
-                    }
-                );
-            } else {
-                alert('Geolocation is not supported by your browser');
-            }
-        });
-        
-        // Quick destination buttons
-        function setDestination(place) {
-            document.getElementById('dest-input').value = place + ' nearby';
-        }
-    </script>
 </body>
 </html>
 

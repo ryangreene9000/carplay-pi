@@ -368,3 +368,33 @@ class BluetoothManager:
             'connected': self.is_connected_flag,
             'connected_device': self.connected_device
         }
+    
+    @staticmethod
+    def get_phone_location():
+        """
+        Get location from the connected phone via Bluetooth.
+        
+        This is a stub implementation. Real location sharing would require:
+        - iPhone: Location sharing via iCloud or a companion app
+        - Android: Location sharing via GATT service or companion app
+        
+        For now, returns None. Future implementation could:
+        - Use a BLE GATT characteristic for location data
+        - Poll a companion app API
+        - Use AVRCP metadata if phone shares location there
+        
+        Returns:
+            dict with 'lat' and 'lon' keys, or None if unavailable
+        """
+        try:
+            # Placeholder: In the future, this could:
+            # 1. Check if connected device supports location service
+            # 2. Read location from GATT characteristic
+            # 3. Or query companion app API
+            
+            # For now, return None (phone location not yet implemented)
+            return None
+            
+        except Exception as e:
+            print(f"Phone location error: {e}")
+            return None
