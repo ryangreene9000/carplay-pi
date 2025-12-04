@@ -10,6 +10,7 @@ import time
 import os
 import subprocess
 import platform
+import shutil
 
 # =============================================================================
 # Check for optional dependencies and warn if missing
@@ -200,15 +201,24 @@ def bluetooth_status():
 
 # =============================================================================
 # Media Control Endpoints
-# Uses native BlueZ D-Bus interface first, falls back to playerctl
+# Auto-detects: playerctl (preferred) or BlueZ D-Bus AVRCP (fallback)
 # =============================================================================
 
 import logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
+# Auto-detect if playerctl is installed
+PLAYERCTL_EXISTS = shutil.which("playerctl") is not None
+if PLAYERCTL_EXISTS:
+    logging.info("playerctl detected - using as primary media controller")
+else:
+    logging.info("playerctl not found - will use BlueZ AVRCP fallback")
+
 def run_media_command(bluez_cmd, playerctl_cmd):
     """
-    Run a media command, trying BlueZ D-Bus first, then playerctl as fallback.
+    Run a media command using the best available method:
+    1. playerctl (if installed and working)
+    2. BlueZ D-Bus AVRCP (fallback)
     
     Args:
         bluez_cmd: BlueZ MediaPlayer1 method name (e.g., 'Play', 'Pause')
@@ -221,16 +231,41 @@ def run_media_command(bluez_cmd, playerctl_cmd):
     if platform.system().lower() != 'linux':
         return False, "Media controls only available on Raspberry Pi"
     
-    # Try BlueZ native D-Bus control first (more reliable)
+    # Try playerctl first if it exists
+    if PLAYERCTL_EXISTS:
+        logging.debug(f"Trying playerctl command: {playerctl_cmd}")
+        try:
+            out = subprocess.check_output(
+                ["playerctl", playerctl_cmd],
+                stderr=subprocess.STDOUT,
+                text=True,
+                timeout=5
+            )
+            return True, out.strip() if out.strip() else "OK"
+        except subprocess.CalledProcessError as e:
+            error_msg = e.output.strip() if e.output else ""
+            # If playerctl says no players, try BlueZ fallback
+            if "no player" in error_msg.lower() or "no players" in error_msg.lower():
+                logging.debug(f"playerctl: {error_msg}, trying BlueZ AVRCP fallback...")
+            else:
+                logging.debug(f"playerctl error: {error_msg}")
+                # Still try BlueZ as fallback
+        except Exception as e:
+            logging.debug(f"playerctl exception: {e}, trying BlueZ fallback...")
+    
+    # Fallback to BlueZ native D-Bus control
     if BLUEZ_MEDIA_AVAILABLE and run_bluez_media_command:
         logging.debug(f"Trying BlueZ D-Bus command: {bluez_cmd}")
         ok, msg = run_bluez_media_command(bluez_cmd)
         if ok:
             return ok, msg
-        logging.debug(f"BlueZ command failed: {msg}, trying playerctl...")
+        return False, msg
     
-    # Fall back to playerctl
-    return run_playerctl_command(playerctl_cmd)
+    # Neither method available
+    if not PLAYERCTL_EXISTS and not BLUEZ_MEDIA_AVAILABLE:
+        return False, "No media controller available. Install playerctl or dbus-python."
+    
+    return False, "No active media player found (is your phone connected?)"
 
 def get_active_player():
     """

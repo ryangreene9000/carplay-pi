@@ -133,14 +133,13 @@ To make the application start automatically when the Raspberry Pi boots:
 For the Raspberry Pi to receive audio from your phone (act as an A2DP sink), install these packages:
 
 ```bash
-sudo apt-get install -y bluez bluez-tools pulseaudio pulseaudio-module-bluetooth playerctl
+sudo apt-get install -y bluez bluez-tools pulseaudio pulseaudio-module-bluetooth
 ```
 
 **Important notes:**
 - The Raspberry Pi must be configured as an A2DP audio sink
 - Your phone acts as the A2DP source (sends audio to the Pi)
 - Pairing may require confirmation on both devices
-- `playerctl` is used to control media playback (play/pause/next/previous)
 
 **To make the Pi discoverable for pairing:**
 ```bash
@@ -155,6 +154,22 @@ default-agent
 ```
 
 After pairing, PulseAudio should automatically route audio from the connected phone.
+
+### Media Control Setup (play/pause/next/previous)
+
+The app supports two methods for controlling phone media playback:
+
+**Option A: playerctl (recommended)**
+```bash
+bash scripts/install_playerctl.sh
+```
+
+**Option B: BlueZ AVRCP via D-Bus (automatic fallback)**
+```bash
+pip install dbus-python
+```
+
+**Note:** If playerctl is not available or fails, the app automatically falls back to native BlueZ AVRCP control via D-Bus. No configuration needed - it just works!
 
 ### Map Location
 - Default map location is set to Toronto, Canada
