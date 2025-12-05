@@ -440,8 +440,8 @@
 <body class="map-screen" data-platform="{{ platform or '' }}">
     <div class="container">
         <header>
-            <a href="/" class="back-button">← Back</a>
-            <h1>🗺️ Map Navigation</h1>
+            <a href="/" class="back-button">&lt; Back</a>
+            <h1>Map Navigation</h1>
         </header>
         
         <main class="map-container">
@@ -459,7 +459,7 @@
                 <!-- Directions Panel (left side) -->
                 <div id="directions-panel" class="hidden">
                     <div id="directions-panel-header">
-                        <h3>🧭 Directions</h3>
+                        <h3>Directions</h3>
                         <button id="directions-panel-close" onclick="closeDirectionsPanel()">×</button>
                     </div>
                     <div id="directions-summary"></div>
@@ -481,12 +481,12 @@
             <div class="map-controls">
                 <h3>Route Planning</h3>
                 <div class="route-input">
-                    <input type="text" id="origin-input" placeholder="📍 e.g., 2091 Saint Francis Way, San Carlos, CA">
-                    <input type="text" id="dest-input" placeholder="🎯 e.g., 246 Highland Ave, State College, PA">
+                    <input type="text" id="origin-input" placeholder="FROM: 2091 Saint Francis Way, San Carlos, CA">
+                    <input type="text" id="dest-input" placeholder="TO: 246 Highland Ave, State College, PA">
                 </div>
                 
                 <button id="route-btn" class="btn-primary">Get Directions</button>
-                <button id="locate-btn" class="btn-secondary" style="margin-top: 10px;">📍 Use My Location</button>
+                <button id="locate-btn" class="btn-secondary" style="margin-top: 10px;">USE MY LOCATION</button>
                 
                 <div class="location-info" id="location-info" style="display: none;">
                     <span>Current Location:</span>
@@ -494,10 +494,10 @@
                 </div>
                 
                 <div class="quick-locations">
-                    <button class="quick-btn" id="btn-fuel" onclick="searchNearbyPlaces('fuel')">⛽ Gas Stations</button>
-                    <button class="quick-btn" id="btn-restaurant" onclick="searchNearbyPlaces('restaurant')">🍽️ Restaurants</button>
-                    <button class="quick-btn" id="btn-parking" onclick="searchNearbyPlaces('parking')">🅿️ Parking</button>
-                    <button class="quick-btn" id="btn-hospital" onclick="searchNearbyPlaces('hospital')">🏥 Hospitals</button>
+                    <button class="quick-btn" id="btn-fuel" onclick="searchNearbyPlaces('fuel')">GAS</button>
+                    <button class="quick-btn" id="btn-restaurant" onclick="searchNearbyPlaces('restaurant')">FOOD</button>
+                    <button class="quick-btn" id="btn-parking" onclick="searchNearbyPlaces('parking')">PARK</button>
+                    <button class="quick-btn" id="btn-hospital" onclick="searchNearbyPlaces('hospital')">HOSP</button>
                 </div>
             </div>
         </main>

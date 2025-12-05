@@ -120,7 +120,7 @@ function showCall(state, callerId, callerName) {
         case 'incoming':
             incomingEl.classList.add('ringing');
             stateEl.textContent = 'Incoming Call';
-            callIcon.textContent = '📲';
+            callIcon.textContent = 'RING';
             answerBtn.classList.remove('hidden');
             durationEl.classList.add('hidden');
             stopDurationTimer();
@@ -129,7 +129,7 @@ function showCall(state, callerId, callerName) {
         case 'active':
             incomingEl.classList.add('active');
             stateEl.textContent = 'On Call';
-            callIcon.textContent = '📞';
+            callIcon.textContent = 'CALL';
             answerBtn.classList.add('hidden');
             durationEl.classList.remove('hidden');
             startDurationTimer();
@@ -139,14 +139,14 @@ function showCall(state, callerId, callerName) {
         case 'alerting':
             incomingEl.classList.add('active');
             stateEl.textContent = 'Calling...';
-            callIcon.textContent = '📱';
+            callIcon.textContent = 'DIAL';
             answerBtn.classList.add('hidden');
             durationEl.classList.add('hidden');
             break;
             
         case 'held':
             stateEl.textContent = 'On Hold';
-            callIcon.textContent = '⏸️';
+            callIcon.textContent = 'HOLD';
             break;
             
         default:
@@ -233,7 +233,7 @@ function updateRecentCalls(calls) {
     if (!calls || calls.length === 0) {
         callList.innerHTML = `
             <li class="empty-state">
-                <div class="icon">📱</div>
+                    <div class="icon">PHONE</div>
                 <p>No recent calls</p>
                 <p><small>Your call history will appear here</small></p>
             </li>
@@ -242,8 +242,8 @@ function updateRecentCalls(calls) {
     }
     
     callList.innerHTML = calls.map(call => {
-        const icon = call.type === 'missed' ? '📵' :
-                     call.type === 'outgoing' ? '📤' : '📥';
+        const icon = call.type === 'missed' ? 'X' :
+                     call.type === 'outgoing' ? 'OUT' : 'IN';
         const typeLabel = call.type === 'missed' ? 'Missed' :
                          call.type === 'outgoing' ? 'Outgoing' : 'Incoming';
         

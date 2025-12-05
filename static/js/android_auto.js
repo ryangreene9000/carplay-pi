@@ -59,13 +59,13 @@ async function stopAndroidAuto() {
 
 function updateUI() {
     if (isActive) {
-        statusIcon.textContent = '📱';
+        statusIcon.textContent = 'ON';
         statusText.textContent = 'Android Auto Active';
         statusDesc.textContent = 'Your Android phone is connected and ready';
         startBtn.style.display = 'none';
         stopBtn.style.display = 'block';
     } else {
-        statusIcon.textContent = '📱';
+        statusIcon.textContent = 'OFF';
         statusText.textContent = 'Android Auto Not Active';
         statusDesc.textContent = 'Connect your Android phone to use Android Auto';
         startBtn.style.display = 'block';

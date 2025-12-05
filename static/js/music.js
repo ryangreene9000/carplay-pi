@@ -245,7 +245,7 @@ function displayDevices(devices) {
         if (device.rssi !== null && device.rssi !== undefined) {
             const signalQuality = device.rssi > -50 ? 'Excellent' : device.rssi > -70 ? 'Good' : 'Weak';
             const signalColor = device.rssi > -50 ? '#4CAF50' : device.rssi > -70 ? '#FFC107' : '#f44336';
-            signalIndicator = `<span style="color: ${signalColor}; font-size: 0.8em;">📶 ${signalQuality} (${device.rssi} dBm)</span>`;
+            signalIndicator = `<span style="color: ${signalColor}; font-size: 0.8em;">${signalQuality} (${device.rssi} dBm)</span>`;
         }
         
         // Check if this device is currently connected

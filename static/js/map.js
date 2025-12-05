@@ -213,7 +213,7 @@ function setCurrentLocation(lat, lon, source = 'phone') {
             
             currentLocationMarker = L.marker(location, { icon, zIndexOffset: 1000 })
                 .addTo(map)
-                .bindPopup(`📍 Your Location (${source})`);
+                .bindPopup(`Your Location (${source})`);
         }
         
         // Only auto-center if not actively navigating and not in POI search
@@ -356,7 +356,7 @@ async function useMyLocation() {
     
     if (locateBtn) {
         locateBtn.disabled = true;
-        locateBtn.innerHTML = '⏳ Finding...';
+        locateBtn.innerHTML = 'FINDING...';
     }
     
     try {
@@ -387,7 +387,7 @@ async function useMyLocation() {
     } finally {
         if (locateBtn) {
             locateBtn.disabled = false;
-            locateBtn.innerHTML = '📍 Use My Location';
+            locateBtn.innerHTML = 'USE MY LOCATION';
         }
     }
 }
@@ -428,20 +428,20 @@ function addMarker(location, popupText, color = 'blue') {
 }
 
 function addPoiMarker(place, index, isClosest = false) {
-    const typeIcons = {
-        'fuel': '⛽',
-        'gas': '⛽',
-        'restaurant': '🍽️',
-        'food': '🍽️',
-        'parking': '🅿️',
-        'hospital': '🏥',
-        'pharmacy': '💊',
-        'charging': '🔌',
-        'hotel': '🏨',
-        'supermarket': '🛒'
+    const typeLabels = {
+        'fuel': 'GAS',
+        'gas': 'GAS',
+        'restaurant': 'FOOD',
+        'food': 'FOOD',
+        'parking': 'P',
+        'hospital': 'H',
+        'pharmacy': 'RX',
+        'charging': 'EV',
+        'hotel': 'HTL',
+        'supermarket': 'MKT'
     };
     
-    const emoji = typeIcons[place.type] || '📍';
+    const label = typeLabels[place.type] || 'POI';
     const bgColor = isClosest ? '#4CAF50' : 'white';
     const textColor = isClosest ? 'white' : '#333';
     
@@ -457,7 +457,7 @@ function addPoiMarker(place, index, isClosest = false) {
             box-shadow: 0 2px 8px rgba(0,0,0,0.3);
             white-space: nowrap;
             border: 2px solid ${isClosest ? '#4CAF50' : '#ddd'};
-        ">${emoji} ${index + 1}</div>`,
+        ">${label} ${index + 1}</div>`,
         iconSize: null
     });
     
@@ -469,7 +469,7 @@ function addPoiMarker(place, index, isClosest = false) {
             ${place.address || ''}
             <br><br>
             <button onclick="navigateToPlace(${place.lat}, ${place.lon}, '${place.name.replace(/'/g, "\\'")}')">
-                🧭 Navigate
+                GO
             </button>
         `);
     
@@ -537,7 +537,7 @@ function drawRouteOnMap(route) {
             font-weight: bold;
             white-space: nowrap;
             box-shadow: 0 3px 10px rgba(17, 153, 142, 0.4);
-        ">📍 Start</div>`,
+        ">START</div>`,
         iconSize: null
     });
     
@@ -557,7 +557,7 @@ function drawRouteOnMap(route) {
             font-weight: bold;
             white-space: nowrap;
             box-shadow: 0 3px 10px rgba(235, 51, 73, 0.4);
-        ">🎯 ${truncatedName}</div>`,
+        ">END: ${truncatedName}</div>`,
         iconSize: null
     });
     
@@ -604,7 +604,7 @@ function showTurnByTurn(route) {
             <span class="summary-value">${route.duration || durationMins + ' min'}</span>
         </div>
         <div class="destination-name">
-            🎯 ${destName}
+            TO: ${destName}
         </div>
     `;
     
@@ -651,37 +651,37 @@ function showTurnByTurn(route) {
 }
 
 function getManeuverIcon(type, modifier) {
-    // Map maneuver types to icons
+    // Map maneuver types to text icons (Pi-compatible)
     const icons = {
-        'depart': '🚗',
-        'arrive': '🏁',
-        'turn': modifier === 'left' ? '↰' : modifier === 'right' ? '↱' : '↑',
-        'new name': '↑',
-        'merge': '⤵',
-        'on ramp': '↗',
-        'off ramp': '↘',
-        'fork': modifier === 'left' ? '↖' : '↗',
-        'end of road': modifier === 'left' ? '↰' : '↱',
-        'continue': '↑',
-        'roundabout': '🔄',
-        'rotary': '🔄',
-        'roundabout turn': '🔄',
-        'exit roundabout': '↱',
-        'exit rotary': '↱'
+        'depart': '[GO]',
+        'arrive': '[END]',
+        'turn': modifier === 'left' ? '[L]' : modifier === 'right' ? '[R]' : '[^]',
+        'new name': '[^]',
+        'merge': '[M]',
+        'on ramp': '[ON]',
+        'off ramp': '[OFF]',
+        'fork': modifier === 'left' ? '[FL]' : '[FR]',
+        'end of road': modifier === 'left' ? '[L]' : '[R]',
+        'continue': '[^]',
+        'roundabout': '[O]',
+        'rotary': '[O]',
+        'roundabout turn': '[O]',
+        'exit roundabout': '[EX]',
+        'exit rotary': '[EX]'
     };
     
     // Check modifier for turn direction
     if (type === 'turn' || type === 'end of road' || type === 'fork') {
         if (modifier === 'left' || modifier === 'sharp left' || modifier === 'slight left') {
-            return '↰';
+            return '[L]';
         } else if (modifier === 'right' || modifier === 'sharp right' || modifier === 'slight right') {
-            return '↱';
+            return '[R]';
         } else if (modifier === 'uturn') {
-            return '↩';
+            return '[U]';
         }
     }
     
-    return icons[type] || '↑';
+    return icons[type] || '[^]';
 }
 
 function formatStepDistance(meters) {
@@ -800,9 +800,8 @@ async function searchNearbyPlaces(placeType) {
         // Reset button
         if (btn) {
             btn.disabled = false;
-            const icons = { fuel: '⛽', restaurant: '🍽️', parking: '🅿️', hospital: '🏥' };
-            const names = { fuel: 'Gas Stations', restaurant: 'Restaurants', parking: 'Parking', hospital: 'Hospitals' };
-            btn.innerHTML = `${icons[placeType] || '📍'} ${names[placeType] || placeType}`;
+            const names = { fuel: 'GAS', restaurant: 'FOOD', parking: 'PARK', hospital: 'HOSP' };
+            btn.innerHTML = names[placeType] || placeType.toUpperCase();
         }
     }
 }
@@ -847,10 +846,10 @@ function showPlacesPanel(title, places, errorMsg = null) {
                 ${index + 1}. ${place.name}
                 ${index === 0 ? '<span class="closest-badge">CLOSEST</span>' : ''}
             </div>
-            <div class="place-card-distance">📍 ${place.distance_text}</div>
+            <div class="place-card-distance">${place.distance_text}</div>
             ${place.address ? `<div class="place-card-address">${place.address}</div>` : ''}
             <button class="place-card-btn" onclick="event.stopPropagation(); navigateToPlace(${place.lat}, ${place.lon}, '${place.name.replace(/'/g, "\\'")}')">
-                🧭 Navigate Here
+                GO HERE
             </button>
         </div>
     `).join('');
@@ -971,7 +970,7 @@ function showSuccess(message) {
         document.body.appendChild(panel);
     }
     
-    panel.innerHTML = `✓ ${message}`;
+    panel.innerHTML = `OK: ${message}`;
     panel.style.display = 'block';
     
     setTimeout(() => { panel.style.display = 'none'; }, 3000);
@@ -998,7 +997,7 @@ function showError(message) {
         document.body.appendChild(errorPanel);
     }
     
-    errorPanel.innerHTML = `⚠️ ${message}`;
+    errorPanel.innerHTML = `ERROR: ${message}`;
     errorPanel.style.display = 'block';
     
     setTimeout(() => { errorPanel.style.display = 'none'; }, 4000);

@@ -277,9 +277,9 @@
 </head>
 <body data-platform="{{ platform or '' }}">
     <div class="container">
-        <a href="/" class="back-btn">← Back</a>
+        <a href="/" class="back-btn">&lt; Back</a>
         
-        <h1>📞 Phone</h1>
+        <h1>Phone</h1>
         
         <!-- Connection Status -->
         <div class="status-box">
@@ -292,23 +292,23 @@
         
         <!-- Incoming/Active Call Popup -->
         <div id="incoming" class="incoming-call hidden">
-            <div class="call-icon" id="call-icon">📲</div>
+            <div class="call-icon" id="call-icon">CALL</div>
             <h2 id="caller">Unknown Caller</h2>
             <h3 id="state">Incoming Call</h3>
             <div class="call-duration hidden" id="duration">00:00</div>
             
             <div class="call-buttons">
-                <button class="call-btn answer" id="answer-btn" onclick="answer()">📞</button>
-                <button class="call-btn reject" onclick="reject()">📵</button>
+                <button class="call-btn answer" id="answer-btn" onclick="answer()">ANSWER</button>
+                <button class="call-btn reject" onclick="reject()">END</button>
             </div>
         </div>
         
         <!-- Recent Calls -->
         <div class="recent-calls">
-            <h3>📋 Recent Calls</h3>
+            <h3>Recent Calls</h3>
             <ul class="call-list" id="call-list">
                 <li class="empty-state">
-                    <div class="icon">📱</div>
+                    <div class="icon">PHONE</div>
                     <p>No recent calls</p>
                     <p><small>Connect your phone via Bluetooth</small></p>
                 </li>
