@@ -20,6 +20,261 @@ let isNavigating = false;  // Track if actively navigating
 // Touch zoom tracking for Raspberry Pi fix
 let lastPinchDistance = null;
 
+// Google route line
+window.routeLine = null;
+
+// =============================================================================
+// Google Polyline Decoder
+// =============================================================================
+
+function decodePolyline(encoded) {
+    /**
+     * Decode Google's encoded polyline format into lat/lon coordinates.
+     * This is the standard Google polyline encoding algorithm.
+     */
+    let points = [];
+    let index = 0, len = encoded.length;
+    let lat = 0, lng = 0;
+
+    while (index < len) {
+        let b, shift = 0, result = 0;
+        do {
+            b = encoded.charCodeAt(index++) - 63;
+            result |= (b & 0x1f) << shift;
+            shift += 5;
+        } while (b >= 0x20);
+        let dlat = (result & 1) ? ~(result >> 1) : (result >> 1);
+        lat += dlat;
+
+        shift = 0;
+        result = 0;
+        do {
+            b = encoded.charCodeAt(index++) - 63;
+            result |= (b & 0x1f) << shift;
+            shift += 5;
+        } while (b >= 0x20);
+        let dlng = (result & 1) ? ~(result >> 1) : (result >> 1);
+        lng += dlng;
+
+        points.push({ lat: lat / 1e5, lon: lng / 1e5 });
+    }
+
+    return points;
+}
+
+// =============================================================================
+// Google Navigation Functions
+// =============================================================================
+
+async function fetchGoogleRoute(origin, dest) {
+    /**
+     * Fetch turn-by-turn route from Google Directions API.
+     * 
+     * Args:
+     *   origin: {lat, lon} object
+     *   dest: {lat, lon} object
+     *   
+     * Returns:
+     *   Route object with polyline, distance, duration, and steps
+     */
+    const url = `/api/navigation/route?olat=${origin.lat}&olon=${origin.lon}&dlat=${dest.lat}&dlon=${dest.lon}`;
+    
+    try {
+        const response = await fetch(url);
+        const data = await response.json();
+        return data;
+    } catch (error) {
+        console.error('Route fetch error:', error);
+        return { ok: false, error: 'Network error' };
+    }
+}
+
+async function showGoogleRouteOnMap(origin, dest) {
+    /**
+     * Get Google route and display it on the map with turn-by-turn directions.
+     */
+    showSuccess('Getting route from Google...');
+    
+    const route = await fetchGoogleRoute(origin, dest);
+    
+    if (!route.ok || route.error) {
+        showError(route.error || 'Route lookup failed');
+        return;
+    }
+    
+    // Mark as navigating
+    isNavigating = true;
+    
+    // Clear any existing route
+    if (window.routeLine) {
+        map.removeLayer(window.routeLine);
+        window.routeLine = null;
+    }
+    
+    if (currentRouteLayer) {
+        map.removeLayer(currentRouteLayer);
+        currentRouteLayer = null;
+    }
+    
+    clearMarkers();
+    clearPoiMarkers();
+    
+    // Decode the polyline
+    const points = decodePolyline(route.polyline);
+    const latlngs = points.map(p => [p.lat, p.lon]);
+    
+    // Draw the route line
+    window.routeLine = L.polyline(latlngs, {
+        color: '#4285F4',  // Google blue
+        weight: 6,
+        opacity: 0.9,
+        lineJoin: 'round'
+    }).addTo(map);
+    
+    // Add start marker
+    const startIcon = L.divIcon({
+        className: 'route-marker',
+        html: `<div style="
+            background: linear-gradient(135deg, #34A853 0%, #0F9D58 100%);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 12px;
+            white-space: nowrap;
+            box-shadow: 0 3px 10px rgba(52, 168, 83, 0.4);
+        ">START</div>`,
+        iconSize: null
+    });
+    L.marker(latlngs[0], {icon: startIcon}).addTo(map).bindPopup(route.start_address || 'Starting point');
+    
+    // Add end marker
+    const endIcon = L.divIcon({
+        className: 'route-marker',
+        html: `<div style="
+            background: linear-gradient(135deg, #EA4335 0%, #C5221F 100%);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 12px;
+            white-space: nowrap;
+            box-shadow: 0 3px 10px rgba(234, 67, 53, 0.4);
+        ">DEST</div>`,
+        iconSize: null
+    });
+    L.marker(latlngs[latlngs.length - 1], {icon: endIcon}).addTo(map).bindPopup(route.end_address || 'Destination');
+    
+    // Fit map to show entire route
+    map.fitBounds(window.routeLine.getBounds(), { padding: [50, 50] });
+    
+    // Show turn-by-turn panel
+    updateTurnByTurnPanel(route.steps, route.distance, route.duration);
+    
+    showSuccess(`Route: ${route.distance} - ${route.duration}`);
+}
+
+function updateTurnByTurnPanel(steps, distance, duration) {
+    /**
+     * Update the turn-by-turn directions panel.
+     */
+    const panel = document.getElementById('turnList');
+    if (!panel) return;
+    
+    // Show the panel
+    panel.style.display = 'block';
+    
+    // Build step HTML
+    const stepsHtml = steps.map((step, index) => {
+        const maneuverIcon = getManeuverIconForGoogle(step.maneuver);
+        return `
+            <div class="turn-step" onclick="focusStepOnMap(${index}, ${step.start_lat}, ${step.start_lon})">
+                <span class="turn-icon">${maneuverIcon}</span>
+                <span class="turn-text">${step.instruction}</span>
+                <span class="turn-dist">${step.distance}</span>
+            </div>
+        `;
+    }).join('');
+    
+    panel.innerHTML = `
+        <div class="turn-header">
+            <div class="turn-summary">
+                <strong>${distance}</strong> - <strong>${duration}</strong>
+            </div>
+            <button class="turn-close" onclick="closeTurnPanel()">[X]</button>
+        </div>
+        <div class="turn-steps">
+            ${stepsHtml}
+        </div>
+    `;
+}
+
+function getManeuverIconForGoogle(maneuver) {
+    /**
+     * Get text icon for Google maneuver type.
+     */
+    const icons = {
+        'turn-left': '[L]',
+        'turn-right': '[R]',
+        'turn-slight-left': '[SL]',
+        'turn-slight-right': '[SR]',
+        'turn-sharp-left': '[HL]',
+        'turn-sharp-right': '[HR]',
+        'uturn-left': '[U]',
+        'uturn-right': '[U]',
+        'keep-left': '[KL]',
+        'keep-right': '[KR]',
+        'merge': '[M]',
+        'ramp-left': '[RL]',
+        'ramp-right': '[RR]',
+        'fork-left': '[FL]',
+        'fork-right': '[FR]',
+        'roundabout-left': '[O]',
+        'roundabout-right': '[O]',
+        'straight': '[^]',
+        '': '[^]'
+    };
+    return icons[maneuver] || '[^]';
+}
+
+function focusStepOnMap(index, lat, lon) {
+    /**
+     * Center map on a specific turn step.
+     */
+    if (lat && lon) {
+        map.setView([lat, lon], 17);
+    }
+}
+
+function closeTurnPanel() {
+    /**
+     * Close the turn-by-turn panel and clear route.
+     */
+    const panel = document.getElementById('turnList');
+    if (panel) {
+        panel.style.display = 'none';
+    }
+    
+    // Clear route line
+    if (window.routeLine) {
+        map.removeLayer(window.routeLine);
+        window.routeLine = null;
+    }
+    
+    clearMarkers();
+    isNavigating = false;
+    
+    // Recenter on current location
+    if (window.currentLocation) {
+        map.setView([window.currentLocation.lat, window.currentLocation.lon], 14);
+    }
+}
+
+// Make functions globally available
+window.showGoogleRouteOnMap = showGoogleRouteOnMap;
+window.closeTurnPanel = closeTurnPanel;
+window.focusStepOnMap = focusStepOnMap;
+
 // =============================================================================
 // Touch Zoom Fix for Raspberry Pi
 // =============================================================================
@@ -905,27 +1160,37 @@ async function navigateToPlace(lat, lon, name) {
     // Close places panel
     closePlacesPanel();
     
+    // Update destination input
+    const destInput = document.getElementById('dest-input');
+    if (destInput) {
+        destInput.value = name;
+    }
+    
+    // Use Google Directions for turn-by-turn navigation
+    const origin = { lat: window.currentLocation.lat, lon: window.currentLocation.lon };
+    const dest = { lat: lat, lon: lon };
+    
     try {
-        const url = `/api/route/to_place?start_lat=${window.currentLocation.lat}&start_lon=${window.currentLocation.lon}&lat=${lat}&lon=${lon}&name=${encodeURIComponent(name)}`;
-        const response = await fetch(url);
-        const data = await response.json();
-        
-        if (data.ok || data.success) {
-            // Draw route and show directions
-            drawRouteOnMap(data);
-            
-            // Update destination input
-            const destInput = document.getElementById('dest-input');
-            if (destInput) {
-                destInput.value = name;
-            }
-            
-        } else {
-            showError(data.error || data.message || 'Could not calculate route');
-        }
+        // Try Google route first (has better turn-by-turn)
+        await showGoogleRouteOnMap(origin, dest);
     } catch (error) {
-        console.error('Navigation error:', error);
-        showError('Failed to get directions');
+        console.error('Google route error, trying fallback:', error);
+        
+        // Fallback to OSRM-based route
+        try {
+            const url = `/api/route/to_place?start_lat=${window.currentLocation.lat}&start_lon=${window.currentLocation.lon}&lat=${lat}&lon=${lon}&name=${encodeURIComponent(name)}`;
+            const response = await fetch(url);
+            const data = await response.json();
+            
+            if (data.ok || data.success) {
+                drawRouteOnMap(data);
+            } else {
+                showError(data.error || data.message || 'Could not calculate route');
+            }
+        } catch (fallbackError) {
+            console.error('Fallback navigation error:', fallbackError);
+            showError('Failed to get directions');
+        }
     }
 }
 
@@ -1063,6 +1328,49 @@ document.addEventListener('DOMContentLoaded', () => {
     if (locateBtn) {
         locateBtn.addEventListener('click', useMyLocation);
     }
+    
+    // Map click for destination selection (long press or double tap)
+    // We use a delayed click to avoid interfering with normal panning
+    let clickTimeout = null;
+    let lastClickTime = 0;
+    
+    // Wait for map to be initialized
+    setTimeout(() => {
+        if (map) {
+            // Double-click to set destination and get route
+            map.on('dblclick', async (e) => {
+                e.originalEvent.preventDefault();
+                
+                const dest = { lat: e.latlng.lat, lon: e.latlng.lng };
+                
+                // Get current location as origin
+                let origin = window.currentLocation;
+                
+                if (!origin) {
+                    // Try to get location first
+                    showSuccess('Getting your location...');
+                    origin = await getBestLocation();
+                    window.currentLocation = origin;
+                }
+                
+                if (origin && origin.lat && origin.lon) {
+                    // Show destination marker temporarily
+                    const tempMarker = L.marker([dest.lat, dest.lon]).addTo(map);
+                    tempMarker.bindPopup('Getting route...').openPopup();
+                    
+                    // Get and show route
+                    await showGoogleRouteOnMap(origin, dest);
+                    
+                    // Remove temp marker (route will show its own)
+                    map.removeLayer(tempMarker);
+                } else {
+                    showError('Could not get your location');
+                }
+            });
+            
+            console.log('Map click handler enabled - double-click to navigate');
+        }
+    }, 1000);
 });
 
 // Make functions available globally

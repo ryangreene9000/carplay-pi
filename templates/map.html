@@ -435,6 +435,97 @@
             font-size: 2em;
             margin-bottom: 10px;
         }
+        
+        /* Google Turn-by-Turn Panel */
+        .turn-panel {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            right: 10px;
+            max-height: 220px;
+            overflow-y: auto;
+            background: rgba(20, 20, 25, 0.95);
+            color: white;
+            padding: 0;
+            border-radius: 16px;
+            font-size: 14px;
+            z-index: 1002;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(10px);
+        }
+        
+        .turn-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 15px;
+            background: linear-gradient(135deg, #4285F4 0%, #1a73e8 100%);
+            border-radius: 16px 16px 0 0;
+            position: sticky;
+            top: 0;
+        }
+        
+        .turn-summary {
+            font-size: 1.1em;
+        }
+        
+        .turn-close {
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 14px;
+        }
+        
+        .turn-close:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+        
+        .turn-steps {
+            padding: 10px;
+        }
+        
+        .turn-step {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            margin-bottom: 6px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 10px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        .turn-step:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
+        
+        .turn-icon {
+            background: #4285F4;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 12px;
+            min-width: 32px;
+            text-align: center;
+        }
+        
+        .turn-text {
+            flex: 1;
+            font-size: 13px;
+            line-height: 1.4;
+        }
+        
+        .turn-dist {
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 12px;
+            white-space: nowrap;
+        }
     </style>
 </head>
 <body class="map-screen" data-platform="{{ platform or '' }}">
@@ -448,6 +539,9 @@
             <!-- Map Display with Panels -->
             <div class="map-wrapper">
                 <div id="map"></div>
+                
+                <!-- Google Turn-by-Turn Panel (bottom overlay) -->
+                <div id="turnList" class="turn-panel" style="display: none;"></div>
                 
                 <!-- Next Turn Banner (top center) -->
                 <div id="next-turn-banner" class="hidden">

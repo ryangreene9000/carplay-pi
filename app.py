@@ -161,6 +161,7 @@ from modules.bluetooth_module import BluetoothManager
 from modules.music_module import MusicManager
 from modules.map_module import MapManager
 from modules.android_auto_module import AndroidAutoManager
+from modules.google_directions import get_route_from_google
 
 # Import Voice Controller
 try:
@@ -1210,6 +1211,36 @@ def navigation_current():
         "ok": True,
         "maps_url": current_nav_url
     })
+
+
+@app.route('/api/navigation/route')
+def get_navigation_route():
+    """
+    Get turn-by-turn route from Google Directions API.
+    
+    Query params:
+        olat: Origin latitude
+        olon: Origin longitude
+        dlat: Destination latitude
+        dlon: Destination longitude
+        
+    Returns:
+        JSON with polyline, distance, duration, and turn-by-turn steps
+    """
+    try:
+        origin_lat = float(request.args.get("olat"))
+        origin_lon = float(request.args.get("olon"))
+        dest_lat = float(request.args.get("dlat"))
+        dest_lon = float(request.args.get("dlon"))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "Invalid coordinates"}), 400
+
+    route = get_route_from_google(origin_lat, origin_lon, dest_lat, dest_lon)
+
+    if not route:
+        return jsonify({"ok": False, "error": "Route lookup failed"}), 500
+
+    return jsonify(route)
 
 @app.route('/navigation', methods=['GET'])
 def navigation_view():
