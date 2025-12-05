@@ -381,9 +381,10 @@ async function getBestLocation() {
     /**
      * Get the best available location using this priority:
      * 1. Connected phone (via Bluetooth)
-     * 2. Raspberry Pi (GPS or IP geolocation)
-     * 3. Browser geolocation
-     * 4. Default location
+     * 2. WiFi-based Google Geolocation (most accurate on Pi)
+     * 3. Raspberry Pi (GPS or IP geolocation)
+     * 4. Browser geolocation
+     * 5. Default location
      */
     
     // Try backend location service (phone -> Pi)
@@ -395,12 +396,34 @@ async function getBestLocation() {
             return {
                 lat: data.lat,
                 lon: data.lon,
+                accuracy: data.accuracy,
                 source: data.source,
                 city: data.city || ''
             };
         }
     } catch (e) {
         console.log('Backend location failed:', e);
+    }
+    
+    // Try WiFi-based accurate location (Google Geolocation API)
+    try {
+        console.log('Trying WiFi-based accurate location...');
+        const response = await fetch('/api/location/accurate');
+        const data = await response.json();
+        if (data.ok && data.lat && data.lon) {
+            console.log(`Accurate location from ${data.source}: ${data.lat}, ${data.lon} (±${data.accuracy}m)`);
+            return {
+                lat: data.lat,
+                lon: data.lon,
+                accuracy: data.accuracy,
+                source: data.source,
+                wifi_count: data.wifi_count
+            };
+        } else {
+            console.log('WiFi location failed:', data.error);
+        }
+    } catch (e) {
+        console.log('WiFi location request failed:', e);
     }
     
     // Fallback to browser geolocation
@@ -416,6 +439,7 @@ async function getBestLocation() {
             return {
                 lat: position.coords.latitude,
                 lon: position.coords.longitude,
+                accuracy: position.coords.accuracy,
                 source: 'browser'
             };
         } catch (e) {
@@ -611,12 +635,28 @@ async function useMyLocation() {
     
     if (locateBtn) {
         locateBtn.disabled = true;
-        locateBtn.innerHTML = 'FINDING...';
+        locateBtn.innerHTML = 'SCANNING...';
     }
+    
+    // Show loading overlay
+    showLoadingOverlay('Getting accurate location...');
     
     try {
         const location = await getBestLocation();
         window.currentLocation = location;
+        
+        // Log location source for debugging
+        console.log('Location result:', location);
+        
+        // Show accuracy info if available
+        let sourceInfo = location.source || 'unknown';
+        if (location.accuracy) {
+            sourceInfo += ` (±${Math.round(location.accuracy)}m)`;
+        }
+        if (location.wifi_count) {
+            sourceInfo += ` [${location.wifi_count} WiFi]`;
+        }
+        console.log('Location source:', sourceInfo);
         
         if (originInput) {
             originInput.value = `${location.lat.toFixed(6)}, ${location.lon.toFixed(6)}`;
@@ -632,7 +672,7 @@ async function useMyLocation() {
         const userLocation = [location.lat, location.lon];
         map.setView(userLocation, 15);
         clearMarkers();
-        addMarker(userLocation, 'Your Location', 'blue');
+        addMarker(userLocation, `Your Location (${sourceInfo})`, 'blue');
         
         showSuccess(`Location found (${location.source})`);
         
@@ -1214,7 +1254,61 @@ function setLoading(isLoading) {
     }
 }
 
+function showLoadingOverlay(message = 'Loading...') {
+    let overlay = document.getElementById('loading-overlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'loading-overlay';
+        overlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 3000;
+        `;
+        overlay.innerHTML = `
+            <div style="
+                width: 50px;
+                height: 50px;
+                border: 4px solid rgba(255,255,255,0.3);
+                border-top-color: #4285F4;
+                border-radius: 50%;
+                animation: spin 1s linear infinite;
+            "></div>
+            <div id="loading-text" style="
+                color: white;
+                margin-top: 20px;
+                font-size: 16px;
+                font-weight: 500;
+            ">${message}</div>
+        `;
+        // Add CSS animation
+        const style = document.createElement('style');
+        style.textContent = '@keyframes spin { to { transform: rotate(360deg); } }';
+        document.head.appendChild(style);
+        document.body.appendChild(overlay);
+    } else {
+        const text = overlay.querySelector('#loading-text');
+        if (text) text.textContent = message;
+        overlay.style.display = 'flex';
+    }
+}
+
+function hideLoadingOverlay() {
+    const overlay = document.getElementById('loading-overlay');
+    if (overlay) {
+        overlay.style.display = 'none';
+    }
+}
+
 function showSuccess(message) {
+    hideLoadingOverlay();
     let panel = document.getElementById('success-panel');
     if (!panel) {
         panel = document.createElement('div');
@@ -1242,6 +1336,7 @@ function showSuccess(message) {
 }
 
 function showError(message) {
+    hideLoadingOverlay();
     let errorPanel = document.getElementById('error-panel');
     if (!errorPanel) {
         errorPanel = document.createElement('div');

@@ -162,6 +162,7 @@ from modules.music_module import MusicManager
 from modules.map_module import MapManager
 from modules.android_auto_module import AndroidAutoManager
 from modules import google_maps
+from modules import geolocation
 
 # Import Voice Controller
 try:
@@ -728,6 +729,45 @@ def current_location():
         })
     except Exception as e:
         return jsonify({"ok": False, "message": str(e)})
+
+
+@app.route('/api/location/accurate')
+def accurate_location():
+    """
+    Get accurate location using WiFi-based Google Geolocation API.
+    
+    This scans nearby WiFi networks and uses Google's database to
+    triangulate position - much more accurate than IP geolocation.
+    
+    Falls back to IP geolocation if WiFi scan fails.
+    """
+    result = geolocation.get_location_with_fallback()
+    return jsonify(result)
+
+
+@app.route('/api/location/wifi')
+def wifi_location():
+    """
+    Get location using only WiFi scanning (no IP fallback).
+    Returns error if WiFi scan fails.
+    """
+    result = geolocation.get_accurate_location()
+    return jsonify(result)
+
+
+@app.route('/api/location/wifi/scan')
+def wifi_scan():
+    """
+    Debug endpoint: scan and return visible WiFi networks.
+    Useful for testing if WiFi scanning is working on the Pi.
+    """
+    networks = geolocation.scan_wifi_networks()
+    return jsonify({
+        "ok": True,
+        "count": len(networks),
+        "networks": networks[:20]  # Limit to top 20
+    })
+
 
 # =============================================================================
 # Places Search API (Overpass for POI)
