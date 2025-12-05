@@ -161,7 +161,7 @@ from modules.bluetooth_module import BluetoothManager
 from modules.music_module import MusicManager
 from modules.map_module import MapManager
 from modules.android_auto_module import AndroidAutoManager
-from modules.google_directions import get_route_from_google
+from modules import google_maps
 
 # Import Voice Controller
 try:
@@ -1235,12 +1235,118 @@ def get_navigation_route():
     except (TypeError, ValueError):
         return jsonify({"ok": False, "error": "Invalid coordinates"}), 400
 
-    route = get_route_from_google(origin_lat, origin_lon, dest_lat, dest_lon)
-
-    if not route:
-        return jsonify({"ok": False, "error": "Route lookup failed"}), 500
-
+    route = google_maps.get_directions(origin_lat, origin_lon, dest_lat, dest_lon)
     return jsonify(route)
+
+
+# =============================================================================
+# Google Maps API Endpoints (Clean module)
+# =============================================================================
+
+@app.route('/api/google/directions')
+def google_directions():
+    """
+    Google Directions API - Turn-by-turn navigation
+    
+    Query params: olat, olon, dlat, dlon
+    """
+    try:
+        origin_lat = float(request.args.get("olat"))
+        origin_lon = float(request.args.get("olon"))
+        dest_lat = float(request.args.get("dlat"))
+        dest_lon = float(request.args.get("dlon"))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "Invalid coordinates"}), 400
+    
+    return jsonify(google_maps.get_directions(origin_lat, origin_lon, dest_lat, dest_lon))
+
+
+@app.route('/api/google/places')
+def google_places():
+    """
+    Google Places API - Nearby search
+    
+    Query params: lat, lon, type, radius (optional)
+    """
+    try:
+        lat = float(request.args.get("lat"))
+        lon = float(request.args.get("lon"))
+        place_type = request.args.get("type", "gas_station")
+        radius = int(request.args.get("radius", 5000))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "Invalid parameters"}), 400
+    
+    return jsonify(google_maps.search_nearby(lat, lon, place_type, radius))
+
+
+@app.route('/api/google/geocode')
+def google_geocode():
+    """
+    Google Geocoding API - Address to coordinates
+    
+    Query params: address
+    """
+    address = request.args.get("address", "")
+    if not address:
+        return jsonify({"ok": False, "error": "Address required"}), 400
+    
+    return jsonify(google_maps.geocode(address))
+
+
+@app.route('/api/google/reverse')
+def google_reverse_geocode():
+    """
+    Google Reverse Geocoding - Coordinates to address
+    
+    Query params: lat, lon
+    """
+    try:
+        lat = float(request.args.get("lat"))
+        lon = float(request.args.get("lon"))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "Invalid coordinates"}), 400
+    
+    return jsonify(google_maps.reverse_geocode(lat, lon))
+
+
+@app.route('/api/google/search')
+def google_text_search():
+    """
+    Google Places Text Search - Search by query
+    
+    Query params: q, lat (optional), lon (optional)
+    """
+    query = request.args.get("q", "")
+    if not query:
+        return jsonify({"ok": False, "error": "Query required"}), 400
+    
+    lat = request.args.get("lat")
+    lon = request.args.get("lon")
+    
+    if lat and lon:
+        try:
+            lat = float(lat)
+            lon = float(lon)
+        except ValueError:
+            lat = None
+            lon = None
+    
+    return jsonify(google_maps.search_text(query, lat, lon))
+
+
+@app.route('/api/google/details')
+def google_place_details():
+    """
+    Google Place Details API
+    
+    Query params: place_id
+    """
+    place_id = request.args.get("place_id", "")
+    if not place_id:
+        return jsonify({"ok": False, "error": "place_id required"}), 400
+    
+    return jsonify(google_maps.get_place_details(place_id))
+
 
 @app.route('/navigation', methods=['GET'])
 def navigation_view():

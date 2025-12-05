@@ -610,6 +610,7 @@
             crossorigin=""></script>
     <!-- Leaflet Gesture Handling (for better touch support on RPi) -->
     <script src="https://unpkg.com/leaflet-gesture-handling@1.2.2/dist/leaflet-gesture-handling.min.js"></script>
+    <script src="{{ url_for('static', filename='js/google_maps.js') }}"></script>
     <script src="{{ url_for('static', filename='js/map.js') }}"></script>
     {% if platform and 'arm' in platform %}
     <script src="{{ url_for('static', filename='js/pi-touch.js') }}"></script>
