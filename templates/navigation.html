@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Navigation</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            margin: 0;
+            font-family: sans-serif;
+            background: #000;
+            color: #fff;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        header {
+            padding: 8px 12px;
+            background: #111;
+            font-size: 18px;
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .qr-link {
+            font-size: 12px;
+            color: #1e90ff;
+            text-decoration: none;
+            padding: 4px 8px;
+            border: 1px solid #1e90ff;
+            border-radius: 4px;
+        }
+        .qr-link:hover {
+            background: #1e90ff;
+            color: #000;
+        }
+        main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .empty {
+            text-align: center;
+            opacity: 0.7;
+            font-size: 16px;
+        }
+        #currentUrl {
+            font-size: 11px;
+            padding: 4px 10px;
+            background: #111;
+            color: #aaa;
+            word-break: break-all;
+        }
+        .open-button {
+            margin-top: 20px;
+            padding: 15px 30px;
+            background: #1e90ff;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .open-button:hover {
+            background: #1c7ed6;
+        }
+        .route-info {
+            text-align: center;
+            padding: 20px;
+            max-width: 600px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <span>Navigation</span>
+            <a href="/iphone_nav" class="qr-link">Show QR Code</a>
+        </header>
+        <div id="currentUrl"></div>
+        <main>
+            <div id="empty" class="empty">
+                <p>No route received yet.</p>
+                <p>Use your iPhone to send a Google Maps link.</p>
+            </div>
+            <div id="routeInfo" class="route-info" style="display:none;">
+                <p style="font-size: 18px; margin-bottom: 15px;">Route received!</p>
+                <p style="font-size: 14px; opacity: 0.8; margin-bottom: 20px;">Click the button below to open Google Maps navigation.</p>
+                <a id="openMapsBtn" class="open-button" target="_blank">Open in Google Maps</a>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        let currentUrl = null;
+
+        async function pollNav() {
+            try {
+                const resp = await fetch("/api/navigation/current");
+                const data = await resp.json();
+
+                if (data && data.maps_url) {
+                    if (data.maps_url !== currentUrl) {
+                        currentUrl = data.maps_url;
+                        const empty = document.getElementById("empty");
+                        const routeInfo = document.getElementById("routeInfo");
+                        const info = document.getElementById("currentUrl");
+                        const openBtn = document.getElementById("openMapsBtn");
+
+                        empty.style.display = "none";
+                        routeInfo.style.display = "block";
+                        info.textContent = "Route: " + currentUrl;
+                        openBtn.href = currentUrl;
+                        
+                        // Automatically redirect to Google Maps after a short delay
+                        setTimeout(() => {
+                            window.location.href = currentUrl;
+                        }, 1000);
+                    }
+                } else {
+                    // No URL - show empty state
+                    if (currentUrl !== null) {
+                        currentUrl = null;
+                        const empty = document.getElementById("empty");
+                        const routeInfo = document.getElementById("routeInfo");
+                        const info = document.getElementById("currentUrl");
+                        
+                        empty.style.display = "block";
+                        routeInfo.style.display = "none";
+                        info.textContent = "";
+                    }
+                }
+            } catch (e) {
+                console.log("pollNav error:", e);
+            } finally {
+                setTimeout(pollNav, 2000);
+            }
+        }
+
+        pollNav();
+    </script>
+</body>
+</html>

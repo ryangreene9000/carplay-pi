@@ -4,15 +4,53 @@ Car Stereo System - Main Application
 Raspberry Pi 5 with Sense HAT and 7" Touch Screen
 """
 
-from flask import Flask, render_template, jsonify, request, Response
+from flask import Flask, render_template, jsonify, request, Response, redirect
 import threading
 import time
 import os
+import sys
 import subprocess
 import platform
 import shutil
 import socket
 import json
+
+# Suppress ALSA warnings early (before any audio libraries are imported)
+# Note: sys is imported above so it's available here
+if platform.system().lower() == 'linux':
+    # Set environment variables to reduce ALSA verbosity
+    os.environ.setdefault('ALSA_CARD', '2')  # Use USB audio card if available
+    os.environ.setdefault('PULSE_ALSA_HACK_DEVICE', '1')
+    # Suppress ALSA error messages (they're harmless warnings)
+    import warnings
+    warnings.filterwarnings('ignore', category=UserWarning)
+    
+    # Filter ALSA errors from stderr (they're harmless warnings from device enumeration)
+    class ALSAErrorFilter:
+        """Filter out harmless ALSA error messages"""
+        def __init__(self, original_stderr):
+            self.original_stderr = original_stderr
+            self.alsa_patterns = [
+                'ALSA lib', 'jack server', 'Cannot connect to server',
+                'JackShmReadWritePtr', 'Unknown PCM', 'Unable to find definition',
+                'pcm_', 'confmisc', 'conf.c', 'snd_'
+            ]
+        
+        def write(self, text):
+            # Only write if it's not an ALSA warning
+            if not any(pattern in text for pattern in self.alsa_patterns):
+                self.original_stderr.write(text)
+        
+        def flush(self):
+            self.original_stderr.flush()
+        
+        def __getattr__(self, name):
+            # Forward other attributes to original stderr
+            return getattr(self.original_stderr, name)
+    
+    # Replace stderr with filtered version
+    if not os.environ.get('KEEP_ALSA_ERRORS'):
+        sys.stderr = ALSAErrorFilter(sys.stderr)
 
 # =============================================================================
 # Force IPv4 for Safari/iPhone GPS Bridge Compatibility
@@ -124,6 +162,16 @@ from modules.music_module import MusicManager
 from modules.map_module import MapManager
 from modules.android_auto_module import AndroidAutoManager
 
+# Import Voice Controller
+try:
+    from modules.voice_control import VoiceController
+    VOICE_CONTROL_AVAILABLE = True
+except ImportError as e:
+    VOICE_CONTROL_AVAILABLE = False
+    VoiceController = None
+    print(f"Warning: Voice control not available: {e}")
+    print("  Install with: pip install SpeechRecognition PyAudio")
+
 # Import Phone Manager for HFP (Hands-Free Profile)
 try:
     from modules.phone_manager import phone_manager
@@ -176,6 +224,12 @@ music = MusicManager()
 map_manager = MapManager()
 android_auto = AndroidAutoManager()
 
+# Initialize voice controller if available
+if VOICE_CONTROL_AVAILABLE:
+    voice = VoiceController()
+else:
+    voice = None
+
 # Global state
 current_screen = 'main_menu'
 system_state = {
@@ -184,6 +238,9 @@ system_state = {
     'current_track': None,
     'volume': 50
 }
+
+# Global variable to store navigation URL from iPhone
+current_nav_url = None
 
 @app.route('/')
 def index():
@@ -224,6 +281,13 @@ def settings_screen():
 def phone_screen():
     """Phone/Bluetooth Calls screen"""
     return render_template('phone.html')
+
+@app.route('/iphone_nav', methods=['GET'])
+def iphone_nav():
+    """
+    Page the iPhone uses to paste/send Google Maps URLs.
+    """
+    return render_template('iphone_nav.html')
 
 # API endpoints for system control
 @app.route('/api/status')
@@ -972,6 +1036,80 @@ def phone_recent():
         return jsonify({"ok": False, "calls": [], "message": "Phone manager not available"})
     
     return jsonify(phone_manager.get_recent_calls())
+
+# =============================================================================
+# Voice Control Endpoints
+# =============================================================================
+
+@app.route('/api/voice/start', methods=['POST'])
+def start_voice():
+    """Start voice control listening"""
+    if not VOICE_CONTROL_AVAILABLE or not voice:
+        return jsonify({"status": "error", "message": "Voice control not available"}), 503
+    
+    try:
+        voice.start_listening()
+        return jsonify({"status": "voice_started"})
+    except Exception as e:
+        logging.error(f"Error starting voice control: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route('/api/voice/stop', methods=['POST'])
+def stop_voice():
+    """Stop voice control listening"""
+    if not VOICE_CONTROL_AVAILABLE or not voice:
+        return jsonify({"status": "error", "message": "Voice control not available"}), 503
+    
+    try:
+        voice.stop_listening()
+        return jsonify({"status": "voice_stopped"})
+    except Exception as e:
+        logging.error(f"Error stopping voice control: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+# =============================================================================
+# iPhone Navigation Bridge Endpoints
+# =============================================================================
+
+@app.route('/api/navigation/set', methods=['POST'])
+def navigation_set():
+    """
+    Receive a Google Maps URL from the iPhone and store it
+    so the Pi UI can show it.
+    """
+    global current_nav_url
+    
+    data = request.get_json(force=True, silent=True) or {}
+    url = (data.get('maps_url') or '').strip()
+    
+    if not url:
+        return jsonify({"ok": False, "error": "missing_url"}), 400
+    
+    current_nav_url = url
+    app.logger.info("Navigation URL received: %s", url)
+    print(f"📍 Navigation URL received: {url}")
+    
+    return jsonify({"ok": True})
+
+@app.route('/api/navigation/current', methods=['GET'])
+def navigation_current():
+    """
+    Let the Pi UI poll the current navigation URL.
+    """
+    global current_nav_url
+    return jsonify({
+        "ok": True,
+        "maps_url": current_nav_url
+    })
+
+@app.route('/navigation', methods=['GET'])
+def navigation_view():
+    """
+    Simple page on the Pi that shows the current Google Maps URL
+    or a message if nothing has been sent yet.
+    """
+    global current_nav_url
+    return render_template('navigation.html', maps_url=current_nav_url)
 
 def update_sense_hat_display():
     """Background thread to update Sense HAT display"""

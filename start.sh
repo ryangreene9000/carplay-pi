@@ -64,6 +64,8 @@ setup_carplay_pipe() {
 # Start Flask backend
 start_flask() {
     echo -e "${GREEN}Starting Flask backend on port 5000...${NC}"
+    # Note: ALSA warnings may appear but are harmless - they occur when
+    # enumerating audio devices and some devices don't exist
     python3 app.py &
     FLASK_PID=$!
     echo "Flask PID: $FLASK_PID"

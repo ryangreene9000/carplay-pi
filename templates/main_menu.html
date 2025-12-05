@@ -2,9 +2,38 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
     <title>Car Stereo System</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    <style>
+        /* Ensure emoji icons render properly with fallbacks */
+        .menu-item .icon {
+            font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Android Emoji", Arial, sans-serif;
+            font-size: 4em;
+            line-height: 1;
+            display: block;
+            margin-bottom: 15px;
+            min-height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        /* Text fallback if emoji don't render */
+        .menu-item .icon::after {
+            content: attr(data-text);
+            font-family: Arial, sans-serif;
+            font-size: 0.3em;
+            display: none;
+            position: absolute;
+        }
+        /* If emoji supported, show emoji; otherwise show text */
+        @supports not (font-variation-settings: normal) {
+            .menu-item .icon {
+                font-size: 2em;
+            }
+        }
+    </style>
 </head>
 <body class="main-menu">
     <div class="container">
@@ -14,41 +43,50 @@
                 <span id="time"></span>
                 <span id="status-indicator"></span>
             </div>
+            <div class="voice-box">
+                <button id="voiceBtn" onclick="toggleVoice()">🎤 Voice Control</button>
+            </div>
         </header>
         
         <main class="menu-grid">
             <a href="/music" class="menu-item music">
-                <div class="icon">🎵</div>
+                <div class="icon" data-text="MUSIC">🎵</div>
                 <h2>Music</h2>
                 <p>Bluetooth Audio</p>
             </a>
             
             <a href="/map" class="menu-item map">
-                <div class="icon">🗺️</div>
+                <div class="icon" data-text="MAP">🗺️</div>
                 <h2>Navigation</h2>
                 <p>Maps & Directions</p>
             </a>
             
             <a href="/android_auto" class="menu-item android-auto">
-                <div class="icon">📱</div>
+                <div class="icon" data-text="PHONE">📱</div>
                 <h2>Android Auto</h2>
                 <p>Phone Integration</p>
             </a>
             
             <a href="/ios_bridge" class="menu-item ios-bridge">
-                <div class="icon">🍎</div>
+                <div class="icon" data-text="APPLE">🍎</div>
                 <h2>iPhone GPS</h2>
                 <p>Share Location</p>
             </a>
             
+            <a href="/navigation" class="menu-item iphone-nav">
+                <div class="icon" data-text="NAV">🧭</div>
+                <h2>Navigation</h2>
+                <p>From iPhone (Google Maps)</p>
+            </a>
+            
             <a href="/phone" class="menu-item phone">
-                <div class="icon">📞</div>
+                <div class="icon" data-text="CALL">📞</div>
                 <h2>Phone</h2>
                 <p>Bluetooth Calls</p>
             </a>
             
             <a href="/settings" class="menu-item settings">
-                <div class="icon">⚙️</div>
+                <div class="icon" data-text="SET">⚙️</div>
                 <h2>Settings</h2>
                 <p>System Configuration</p>
             </a>
@@ -65,4 +103,3 @@
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>
 </html>
-

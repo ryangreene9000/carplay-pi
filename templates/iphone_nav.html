@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>iPhone Navigation Bridge</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            margin: 0;
+            padding: 16px;
+            background-color: #000;
+            color: #fff;
+        }
+        h1 {
+            font-size: 22px;
+            margin-bottom: 8px;
+        }
+        h2 {
+            font-size: 18px;
+            margin-top: 20px;
+            margin-bottom: 8px;
+        }
+        p, li {
+            font-size: 14px;
+            line-height: 1.4;
+        }
+        ol {
+            padding-left: 20px;
+        }
+        .card {
+            background: #111;
+            border-radius: 12px;
+            padding: 12px 14px;
+            margin-bottom: 16px;
+            border: 1px solid #333;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            margin: 8px 0;
+            border-radius: 8px;
+            border: 1px solid #444;
+            background: #111;
+            color: #fff;
+            font-size: 14px;
+        }
+        button {
+            width: 100%;
+            padding: 10px;
+            border-radius: 8px;
+            border: none;
+            background: #1e90ff;
+            color: #fff;
+            font-size: 16px;
+            font-weight: 600;
+            margin-top: 8px;
+        }
+        #status {
+            margin-top: 10px;
+            font-size: 13px;
+            min-height: 18px;
+            opacity: 0.9;
+        }
+        #qrContainer {
+            margin-top: 10px;
+            display: flex;
+            justify-content: center;
+        }
+        #qr {
+            padding: 8px;
+            background: #fff;
+            border-radius: 8px;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+</head>
+<body>
+    <h1>Send Google Maps Route</h1>
+
+    <div class="card">
+        <h2>How to use</h2>
+        <ol>
+            <li>On your iPhone, open Google Maps.</li>
+            <li>Choose a destination and start the route.</li>
+            <li>Tap <strong>Share</strong> → <strong>Copy Link</strong>.</li>
+            <li>Paste the link below and tap <strong>Send to Car Stereo</strong>.</li>
+        </ol>
+    </div>
+
+    <form id="navForm" class="card">
+        <p>Paste your Google Maps link:</p>
+        <input type="text"
+               id="maps_url"
+               placeholder="https://maps.app.goo.gl/..."
+               autocomplete="off" />
+        <button type="submit" id="sendBtn">Send to Car Stereo</button>
+        <div id="status"></div>
+    </form>
+
+    <div class="card">
+        <p>If you are seeing this page on the Raspberry Pi screen, you can scan the QR code with your iPhone camera instead of typing the address manually.</p>
+        <div id="qrContainer">
+            <div id="qr"></div>
+        </div>
+    </div>
+
+    <script>
+        // Build QR code pointing back to this page (for scanning off the Pi screen)
+        (function makeQR() {
+            try {
+                var url = window.location.origin + "/iphone_nav";
+                new QRCode(document.getElementById("qr"), {
+                    text: url,
+                    width: 160,
+                    height: 160
+                });
+            } catch (e) {
+                console.log("QR error:", e);
+            }
+        })();
+
+        const form = document.getElementById("navForm");
+        const input = document.getElementById("maps_url");
+        const statusEl = document.getElementById("status");
+
+        form.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const url = (input.value || "").trim();
+
+            if (!url) {
+                statusEl.textContent = "Paste a Google Maps link first.";
+                return;
+            }
+
+            statusEl.textContent = "Sending route to car stereo...";
+
+            try {
+                const resp = await fetch("/api/navigation/set", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ maps_url: url })
+                });
+
+                const data = await resp.json().catch(() => ({}));
+
+                if (!resp.ok || !data.ok) {
+                    statusEl.textContent =
+                        "Error sending route: " + (data.error || ("HTTP " + resp.status));
+                    return;
+                }
+
+                statusEl.textContent = "Route sent! Check the Navigation screen on the Pi.";
+            } catch (err) {
+                statusEl.textContent = "Network error: " + err;
+            }
+        });
+    </script>
+</body>
+</html>
