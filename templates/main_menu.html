@@ -6,6 +6,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
     <title>Car Stereo System</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    {% if platform and 'arm' in platform %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/pi.css') }}">
+    {% endif %}
     <style>
         /* Ensure emoji icons render properly with fallbacks */
         .menu-item .icon {

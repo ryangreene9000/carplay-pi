@@ -245,7 +245,7 @@ current_nav_url = None
 @app.route('/')
 def index():
     """Main menu screen"""
-    return render_template('main_menu.html')
+    return render_template('main_menu.html', platform=platform.machine())
 
 @app.route('/ios_bridge')
 def ios_bridge():

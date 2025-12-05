@@ -1,0 +1,102 @@
+/* Pi-optimized UI for touchscreen displays */
+
+body {
+    zoom: 1.25; /* enlarge everything for touchscreen */
+    -webkit-text-size-adjust: none;
+    font-family: Arial, sans-serif !important;
+}
+
+/* Main menu grid - 2 columns for touch */
+.menu-grid {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 18px !important;
+    padding: 20px !important;
+}
+
+/* Card grid fallback */
+.card-grid {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 18px !important;
+    padding: 20px !important;
+}
+
+/* Menu items as cards */
+.menu-item, .card {
+    height: 180px !important;
+    border-radius: 18px !important;
+    box-shadow: none !important;
+    background: #ffffff;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+.menu-item .icon {
+    font-size: 3em !important;
+    margin-bottom: 8px !important;
+}
+
+.card img {
+    width: 64px !important;
+    height: 64px !important;
+    margin-bottom: 8px !important;
+}
+
+.menu-item h2, .card-title {
+    font-size: 1.2rem !important;
+    text-align: center !important;
+}
+
+.menu-item p, .card-subtitle {
+    font-size: 0.9rem !important;
+    text-align: center !important;
+}
+
+/* Header/navbar */
+.navbar, header {
+    height: 70px !important;
+    font-size: 1.2rem !important;
+}
+
+header h1 {
+    font-size: 1.4rem !important;
+}
+
+/* Buttons - larger touch targets */
+button, .btn {
+    padding: 14px 24px !important;
+    font-size: 1.1rem !important;
+    border-radius: 12px !important;
+    min-height: 48px;
+    min-width: 48px;
+}
+
+/* Touch-friendly form inputs */
+input, select, textarea {
+    font-size: 1.1rem !important;
+    padding: 12px !important;
+    border-radius: 10px !important;
+    min-height: 48px;
+}
+
+/* Prevent text selection on touch */
+* {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+}
+
+/* Smooth scrolling */
+html {
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Footer sensor info */
+.sensor-info {
+    font-size: 1.1rem !important;
+    padding: 10px !important;
+}
+
