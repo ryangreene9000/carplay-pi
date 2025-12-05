@@ -757,10 +757,105 @@ def meters_to_miles(meters):
     """Convert meters to miles."""
     return meters / 1609.344
 
+
+def _search_google_places(lat, lon, place_type, radius, api_key):
+    """
+    Search for places using Google Places API.
+    
+    Args:
+        lat: User latitude
+        lon: User longitude
+        place_type: Type of place (fuel, restaurant, etc.)
+        radius: Search radius in meters
+        api_key: Google Maps API key
+        
+    Returns:
+        List of place results or None if failed
+    """
+    import requests as req
+    
+    # Map our types to Google Place types
+    google_type_mapping = {
+        'fuel': 'gas_station',
+        'gas': 'gas_station',
+        'restaurant': 'restaurant',
+        'food': 'restaurant',
+        'parking': 'parking',
+        'hospital': 'hospital',
+        'pharmacy': 'pharmacy',
+        'atm': 'atm',
+        'charging': 'electric_vehicle_charging_station',
+        'hotel': 'lodging',
+        'supermarket': 'supermarket'
+    }
+    
+    google_type = google_type_mapping.get(place_type, place_type)
+    
+    try:
+        url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
+        params = {
+            'location': f"{lat},{lon}",
+            'radius': radius,
+            'type': google_type,
+            'key': api_key
+        }
+        
+        response = req.get(url, params=params, timeout=15)
+        data = response.json()
+        
+        if data.get('status') not in ['OK', 'ZERO_RESULTS']:
+            logging.error(f"Google Places error: {data.get('status')}")
+            return None
+        
+        results = []
+        for place in data.get('results', []):
+            place_lat = place.get('geometry', {}).get('location', {}).get('lat')
+            place_lon = place.get('geometry', {}).get('location', {}).get('lng')
+            
+            if place_lat is None or place_lon is None:
+                continue
+            
+            # Calculate distance
+            distance_m = compute_distance_meters(lat, lon, place_lat, place_lon)
+            distance_mi = meters_to_miles(distance_m)
+            
+            results.append({
+                "lat": place_lat,
+                "lon": place_lon,
+                "name": place.get('name', 'Unknown'),
+                "brand": "",
+                "address": place.get('vicinity', ''),
+                "city": "",
+                "type": place_type,
+                "rating": place.get('rating'),
+                "open_now": place.get('opening_hours', {}).get('open_now'),
+                "distance_m": round(distance_m, 1),
+                "distance_mi": round(distance_mi, 2),
+                "distance_text": f"{distance_mi:.1f} mi" if distance_mi >= 0.1 else f"{int(distance_m)} m"
+            })
+        
+        # Sort by distance
+        results.sort(key=lambda x: x["distance_m"])
+        
+        logging.debug(f"Google Places found {len(results)} {place_type}")
+        return results
+        
+    except Exception as e:
+        logging.error(f"Google Places API error: {e}")
+        return None
+
+
 @app.route('/api/places/nearby')
 def places_nearby():
-    """Search for places near a location using Overpass API"""
+    """Search for places near a location using Google Places API or Overpass API"""
     import requests as req
+    
+    # Import config for Google API
+    try:
+        from config import GOOGLE_MAPS_API_KEY, USE_GOOGLE_MAPS
+    except ImportError:
+        GOOGLE_MAPS_API_KEY = None
+        USE_GOOGLE_MAPS = False
     
     lat = request.args.get('lat')
     lon = request.args.get('lon')
@@ -772,21 +867,6 @@ def places_nearby():
     
     user_lat = float(lat)
     user_lon = float(lon)
-    
-    # Map place types to Overpass tags
-    type_mapping = {
-        'fuel': '["amenity"="fuel"]',
-        'gas': '["amenity"="fuel"]',
-        'restaurant': '["amenity"="restaurant"]',
-        'food': '["amenity"~"restaurant|fast_food|cafe"]',
-        'parking': '["amenity"="parking"]',
-        'hospital': '["amenity"="hospital"]',
-        'pharmacy': '["amenity"="pharmacy"]',
-        'atm': '["amenity"="atm"]',
-        'charging': '["amenity"="charging_station"]',
-        'hotel': '["tourism"="hotel"]',
-        'supermarket': '["shop"="supermarket"]'
-    }
     
     # Human-readable type names
     type_names = {
@@ -803,8 +883,37 @@ def places_nearby():
         'supermarket': 'Supermarkets'
     }
     
-    tag = type_mapping.get(place_type, f'["amenity"="{place_type}"]')
     type_name = type_names.get(place_type, place_type.title())
+    
+    # Try Google Places API first (if available)
+    if USE_GOOGLE_MAPS and GOOGLE_MAPS_API_KEY:
+        google_results = _search_google_places(user_lat, user_lon, place_type, radius, GOOGLE_MAPS_API_KEY)
+        if google_results is not None:
+            return jsonify({
+                "ok": True,
+                "type": place_type,
+                "type_name": type_name,
+                "count": len(google_results),
+                "results": google_results,
+                "source": "google"
+            })
+    
+    # Map place types to Overpass tags
+    type_mapping = {
+        'fuel': '["amenity"="fuel"]',
+        'gas': '["amenity"="fuel"]',
+        'restaurant': '["amenity"="restaurant"]',
+        'food': '["amenity"~"restaurant|fast_food|cafe"]',
+        'parking': '["amenity"="parking"]',
+        'hospital': '["amenity"="hospital"]',
+        'pharmacy': '["amenity"="pharmacy"]',
+        'atm': '["amenity"="atm"]',
+        'charging': '["amenity"="charging_station"]',
+        'hotel': '["tourism"="hotel"]',
+        'supermarket': '["shop"="supermarket"]'
+    }
+    
+    tag = type_mapping.get(place_type, f'["amenity"="{place_type}"]')
     
     query = f"""
     [out:json][timeout:15];

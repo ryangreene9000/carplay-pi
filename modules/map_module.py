@@ -1,6 +1,6 @@
 """
 Map Module
-Handles map display and navigation using OpenStreetMap
+Handles map display and navigation using OpenStreetMap and Google Maps API
 Supports both coordinate input and street address geocoding
 """
 
@@ -11,8 +11,19 @@ import re
 import ssl
 import certifi
 import requests
+import logging
 from geopy.geocoders import Nominatim
 from geopy.exc import GeocoderTimedOut, GeocoderServiceError
+
+# Import config for API keys
+try:
+    from config import GOOGLE_MAPS_API_KEY, USE_GOOGLE_MAPS, USE_OSRM_FALLBACK
+except ImportError:
+    GOOGLE_MAPS_API_KEY = None
+    USE_GOOGLE_MAPS = False
+    USE_OSRM_FALLBACK = True
+
+logging.basicConfig(level=logging.DEBUG)
 
 
 class MapManager:
@@ -34,6 +45,7 @@ class MapManager:
         """
         Convert text to (latitude, longitude) coordinates.
         Accepts either street addresses OR coordinate pairs like "lat, lon".
+        Uses Google Maps API if available, with Nominatim fallback.
         
         Args:
             text: Street address OR coordinate string (e.g., "40.78, -77.86")
@@ -58,13 +70,19 @@ class MapManager:
             except (ValueError, IndexError):
                 pass  # Not valid coords, try geocoding
         
+        # Try Google Maps Geocoding API first (if available)
+        if USE_GOOGLE_MAPS and GOOGLE_MAPS_API_KEY:
+            result = self._google_geocode(text)
+            if result:
+                return result
+        
         # Try official geopy geocoder
         try:
             location = self.geolocator.geocode(text, timeout=10)
             if location:
                 return (location.latitude, location.longitude)
         except Exception as e:
-            print(f"Geopy geocoding error: {e}")
+            logging.debug(f"Geopy geocoding error: {e}")
         
         # Fallback: direct Nominatim HTTP request
         try:
@@ -79,9 +97,39 @@ class MapManager:
                 lon = float(results[0]["lon"])
                 return (lat, lon)
         except Exception as e:
-            print(f"Fallback geocoding error: {e}")
+            logging.debug(f"Fallback geocoding error: {e}")
         
         return None
+    
+    def _google_geocode(self, address):
+        """
+        Geocode address using Google Maps Geocoding API.
+        
+        Args:
+            address: Street address string
+            
+        Returns:
+            Tuple of (latitude, longitude) or None if failed
+        """
+        try:
+            import urllib.parse
+            encoded_address = urllib.parse.quote(address)
+            url = f"https://maps.googleapis.com/maps/api/geocode/json?address={encoded_address}&key={GOOGLE_MAPS_API_KEY}"
+            
+            response = requests.get(url, timeout=10)
+            data = response.json()
+            
+            if data.get('status') == 'OK' and data.get('results'):
+                location = data['results'][0]['geometry']['location']
+                logging.debug(f"Google geocode: {address} -> {location['lat']}, {location['lng']}")
+                return (location['lat'], location['lng'])
+            else:
+                logging.debug(f"Google geocode failed: {data.get('status')}")
+                return None
+                
+        except Exception as e:
+            logging.debug(f"Google geocoding error: {e}")
+            return None
     
     def geocode_address_strict(self, address):
         """
@@ -149,8 +197,14 @@ class MapManager:
             origin_list = list(origin_coords)
             dest_list = list(dest_coords)
             
-            # Try to get actual route from OSRM
-            route_data = self._get_osrm_route(origin_coords, dest_coords)
+            # Try Google Directions API first (if available)
+            route_data = None
+            if USE_GOOGLE_MAPS and GOOGLE_MAPS_API_KEY:
+                route_data = self._get_google_route(origin_coords, dest_coords)
+            
+            # Fallback to OSRM if Google fails or is disabled
+            if not route_data and USE_OSRM_FALLBACK:
+                route_data = self._get_osrm_route(origin_coords, dest_coords)
             
             if route_data:
                 return {
@@ -206,6 +260,129 @@ class MapManager:
                 'success': False,
                 'message': f"Error calculating route: {str(e)}"
             }
+    
+    def _get_google_route(self, origin_coords, dest_coords):
+        """
+        Get route from Google Directions API.
+        Returns polyline coordinates and turn-by-turn directions.
+        
+        Args:
+            origin_coords: Tuple of (lat, lon)
+            dest_coords: Tuple of (lat, lon)
+            
+        Returns:
+            Dictionary with route data or None if failed
+        """
+        try:
+            origin_str = f"{origin_coords[0]},{origin_coords[1]}"
+            dest_str = f"{dest_coords[0]},{dest_coords[1]}"
+            
+            url = "https://maps.googleapis.com/maps/api/directions/json"
+            params = {
+                'origin': origin_str,
+                'destination': dest_str,
+                'key': GOOGLE_MAPS_API_KEY,
+                'mode': 'driving',
+                'units': 'imperial'
+            }
+            
+            response = requests.get(url, params=params, timeout=15)
+            data = response.json()
+            
+            if data.get('status') != 'OK' or not data.get('routes'):
+                logging.debug(f"Google Directions error: {data.get('status')}")
+                return None
+            
+            route = data['routes'][0]
+            leg = route['legs'][0]
+            
+            # Extract distance and duration
+            distance_m = leg['distance']['value']  # meters
+            duration_s = leg['duration']['value']  # seconds
+            distance_text = leg['distance']['text']
+            duration_text = leg['duration']['text']
+            
+            # Decode polyline
+            encoded_polyline = route['overview_polyline']['points']
+            polyline = self._decode_google_polyline(encoded_polyline)
+            
+            # Extract turn-by-turn steps
+            steps = []
+            for step in leg.get('steps', []):
+                # Strip HTML tags from instructions
+                import re
+                instruction = re.sub('<[^<]+?>', '', step.get('html_instructions', ''))
+                
+                start_loc = step.get('start_location', {})
+                
+                steps.append({
+                    'instruction': instruction,
+                    'distance_m': step.get('distance', {}).get('value', 0),
+                    'duration_s': step.get('duration', {}).get('value', 0),
+                    'lat': start_loc.get('lat', 0),
+                    'lon': start_loc.get('lng', 0),
+                    'type': step.get('maneuver', 'continue'),
+                    'modifier': ''
+                })
+            
+            logging.debug(f"Google route: {distance_text}, {duration_text}, {len(steps)} steps")
+            
+            return {
+                'distance_m': distance_m,
+                'duration_s': duration_s,
+                'distance_text': distance_text,
+                'duration_text': duration_text,
+                'polyline': polyline,
+                'steps': steps
+            }
+            
+        except Exception as e:
+            logging.error(f"Google Directions error: {e}")
+            return None
+    
+    def _decode_google_polyline(self, encoded):
+        """
+        Decode Google's encoded polyline format.
+        
+        Args:
+            encoded: Encoded polyline string
+            
+        Returns:
+            List of [lat, lon] coordinate pairs
+        """
+        points = []
+        index = 0
+        lat = 0
+        lng = 0
+        
+        while index < len(encoded):
+            # Decode latitude
+            shift = 0
+            result = 0
+            while True:
+                b = ord(encoded[index]) - 63
+                index += 1
+                result |= (b & 0x1f) << shift
+                shift += 5
+                if b < 0x20:
+                    break
+            lat += (~(result >> 1) if result & 1 else result >> 1)
+            
+            # Decode longitude
+            shift = 0
+            result = 0
+            while True:
+                b = ord(encoded[index]) - 63
+                index += 1
+                result |= (b & 0x1f) << shift
+                shift += 5
+                if b < 0x20:
+                    break
+            lng += (~(result >> 1) if result & 1 else result >> 1)
+            
+            points.append([lat / 1e5, lng / 1e5])
+        
+        return points
     
     def _get_osrm_route(self, origin_coords, dest_coords):
         """
