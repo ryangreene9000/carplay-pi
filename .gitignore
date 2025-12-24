@@ -1,3 +1,12 @@
+# Environment and Secrets
+.env
+.env.local
+*.key
+*.pem
+*.p12
+*.jks
+config.py
+
 # Python
 __pycache__/
 *.py[cod]
@@ -7,13 +16,19 @@ __pycache__/
 venv/
 env/
 ENV/
-*.egg-info/
-dist/
-build/
+.venv
 
-# Flask
-instance/
-.webassets-cache
+# Node modules (if any frontend build tools)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
 
 # IDE
 .vscode/
@@ -25,9 +40,17 @@ instance/
 # OS
 .DS_Store
 Thumbs.db
+*.log
 
 # Project specific
-*.log
-map.html
-.env
+*.db
+*.sqlite
+*.sqlite3
 
+# Systemd service files (user-specific paths)
+car-stereo.service
+
+# Temporary files
+*.tmp
+*.bak
+*.swp

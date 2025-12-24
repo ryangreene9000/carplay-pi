@@ -17,6 +17,8 @@ from geopy.exc import GeocoderTimedOut, GeocoderServiceError
 
 # Import config for API keys
 try:
+    import sys
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'config'))
     from config import GOOGLE_MAPS_API_KEY, USE_GOOGLE_MAPS, USE_OSRM_FALLBACK
 except ImportError:
     GOOGLE_MAPS_API_KEY = None

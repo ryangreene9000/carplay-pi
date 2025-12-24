@@ -1,18 +1,16 @@
 """
-Configuration for Car Stereo System
-Store API keys and other settings here
+Configuration Example for Car Stereo System
+Copy this file to config.py and fill in your API keys.
 
-SECURITY NOTE: API keys are loaded from environment variables.
-For local development, create a .env file or set environment variables.
-For production, use environment variables or a secure key management system.
+SECURITY: Never commit config.py to version control.
+This file (config.example.py) is safe to commit as it contains no secrets.
 """
 
 import os
 
 # Google Maps API Key
-# Used for: Geocoding, Directions, Places API
-# SECURITY: This key was intentionally removed for public release.
-# Set GOOGLE_MAPS_API_KEY environment variable or create config.py from config.example.py
+# Get your API key from: https://console.cloud.google.com/google/maps-apis
+# Required APIs: Maps JavaScript API, Directions API, Places API, Geocoding API
 GOOGLE_MAPS_API_KEY = os.environ.get('GOOGLE_MAPS_API_KEY', 'PUT_API_KEY_HERE')
 
 # Default location (used when no GPS available)

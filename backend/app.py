@@ -156,17 +156,22 @@ except ImportError:
 # Import application modules
 # =============================================================================
 
-from modules.sense_hat_module import SenseHATManager
-from modules.bluetooth_module import BluetoothManager
-from modules.music_module import MusicManager
-from modules.map_module import MapManager
-from modules.android_auto_module import AndroidAutoManager
-from modules import google_maps
-from modules import geolocation
+import sys
+import os
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from backend.modules.sense_hat_module import SenseHATManager
+from backend.modules.bluetooth_module import BluetoothManager
+from backend.modules.music_module import MusicManager
+from backend.modules.map_module import MapManager
+from backend.modules.android_auto_module import AndroidAutoManager
+from backend.modules import google_maps
+from backend.modules import geolocation
 
 # Import Voice Controller
 try:
-    from modules.voice_control import VoiceController
+    from backend.modules.voice_control import VoiceController
     VOICE_CONTROL_AVAILABLE = True
 except ImportError as e:
     VOICE_CONTROL_AVAILABLE = False
@@ -176,7 +181,7 @@ except ImportError as e:
 
 # Import Phone Manager for HFP (Hands-Free Profile)
 try:
-    from modules.phone_manager import phone_manager
+    from backend.modules.phone_manager import phone_manager
     PHONE_MANAGER_AVAILABLE = True
 except ImportError as e:
     PHONE_MANAGER_AVAILABLE = False
@@ -185,7 +190,7 @@ except ImportError as e:
 
 # Import BlueZ native media control (preferred over playerctl)
 try:
-    from modules.bluetooth_media import (
+    from backend.modules.bluetooth_media import (
         run_bluez_media_command,
         get_bluez_metadata,
         is_bluez_player_available,
@@ -197,7 +202,9 @@ except ImportError:
     get_bluez_metadata = None
     is_bluez_player_available = None
 
-app = Flask(__name__)
+app = Flask(__name__, 
+            template_folder=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'frontend', 'templates'),
+            static_folder=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'frontend', 'static'))
 # SECURITY: Secret key should be set via environment variable in production
 app.config['SECRET_KEY'] = os.environ.get('FLASK_SECRET_KEY', 'PUT_SECRET_KEY_HERE')
 
@@ -611,7 +618,7 @@ def get_route():
 def phone_location():
     """Get location from connected Bluetooth phone (iPhone or Android)"""
     try:
-        from modules.phone_location import PhoneLocation
+        from backend.modules.phone_location import PhoneLocation
         loc = PhoneLocation.get_location()
         if loc:
             return jsonify({
@@ -635,7 +642,7 @@ def update_phone_location():
     Expected JSON: {"lat": <float>, "lon": <float>, "accuracy": <float>, "timestamp": "..."}
     """
     try:
-        from modules.phone_location import PhoneLocation
+        from backend.modules.phone_location import PhoneLocation
         data = request.json or {}
         
         lat = data.get('lat')
@@ -660,7 +667,7 @@ def update_phone_location():
 def phone_location_status():
     """Get status of phone location providers"""
     try:
-        from modules.phone_location import PhoneLocation
+        from backend.modules.phone_location import PhoneLocation
         return jsonify(PhoneLocation.get_status())
     except Exception as e:
         return jsonify({"error": str(e)})
@@ -677,7 +684,7 @@ def debug_gps():
 def pi_location():
     """Get Pi's location via GPS or IP geolocation"""
     try:
-        from modules.location_module import PiLocation
+        from backend.modules.location_module import PiLocation
         loc = PiLocation.get()
         if loc:
             return jsonify({
@@ -712,7 +719,7 @@ def current_location():
     
     try:
         # Try phone location first (using PhoneLocation for iPhone/Android)
-        from modules.phone_location import PhoneLocation
+        from backend.modules.phone_location import PhoneLocation
         phone_loc = PhoneLocation.get_location()
         if phone_loc:
             logger.info(f"Location from phone: {phone_loc['lat']}, {phone_loc['lon']}")
@@ -728,7 +735,7 @@ def current_location():
         
         # Try Pi location (GPS -> WiFi -> IP)
         # This now uses WiFi-based Google Geolocation as primary method
-        from modules.location_module import PiLocation
+        from backend.modules.location_module import PiLocation
         pi_loc = PiLocation.get()
         if pi_loc:
             source = pi_loc.get("source", "pi")
@@ -931,6 +938,7 @@ def places_nearby():
     
     # Import config for Google API
     try:
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'config'))
         from config import GOOGLE_MAPS_API_KEY, USE_GOOGLE_MAPS
     except ImportError:
         GOOGLE_MAPS_API_KEY = None

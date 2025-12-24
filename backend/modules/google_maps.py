@@ -18,6 +18,8 @@ logger = logging.getLogger(__name__)
 # Google Maps API Key
 # SECURITY: Load from config or environment variable. Hardcoded key removed.
 try:
+    import sys
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'config'))
     from config import GOOGLE_MAPS_API_KEY
     GOOGLE_API_KEY = GOOGLE_MAPS_API_KEY
 except ImportError:
